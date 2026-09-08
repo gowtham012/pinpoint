@@ -975,6 +975,11 @@ test("Stop ends picking with a real click, while the rest of the bar stays inert
   assert.equal((await S(page)).picking, false, "clicking Stop ends picking");
   assert.equal((await dock(page)).armed, false);
   assert.equal((await pending()).length, 0, "and annotates nothing underneath");
+  // Reported from real use: Stop stopped picking AND opened a comment box on itself. isOurs()
+  // used closest("pinpoint-root"), which cannot cross a shadow boundary, so our own controls read
+  // as page content to the document's capture-phase click handler. Stopping is not enough — the
+  // click must not also select something.
+  assert.equal((await S(page)).popOpen, false, "and does not open a comment box on the bar itself");
   await page.close();
 });
 

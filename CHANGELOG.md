@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Fixed
+- **Clicking Stop also opened a comment box on the bar itself.** `isOurs()` asked
+  `el.closest("pinpoint-root")`, and `closest()` does not cross shadow boundaries — so from inside
+  our own shadow root every control Pinpoint owns read as page content, and the document's
+  capture-phase click handler tried to annotate the Stop button. It only ever showed on Stop
+  because that is the one control clickable *while* picking.
+- The MCP server announced itself as `0.1.0` while the package was `0.4.0` — the string every MCP
+  client shows in its server list. It reads `package.json` now, so the two cannot drift.
 - **A region anchored to the whole page instead of the thing you drew around.** Nobody drags
   pixel-perfect: a box drawn generously around a card is contained by no card, so a rule asking for
   the element that *contains* the box reached `<main>`. Asking instead for the outermost mostly-

@@ -357,7 +357,15 @@
   (document.documentElement || document.body).appendChild(host);
 
   // ---------- helpers: selectors, paths, styles, source hints ----------
-  const isOurs = (el) => !!(el && (el === host || el.closest?.("pinpoint-root")));
+  // closest() does not cross shadow boundaries, so from inside our own shadow root the host is
+  // unreachable and every control we own looked like page content. While picking, that made the
+  // document's capture-phase click handler open a comment box on our own Stop button.
+  const isOurs = (el) => {
+    if (!el) return false;
+    if (el === host) return true;
+    if (el.getRootNode && el.getRootNode() === shadow) return true;
+    return !!el.closest?.("pinpoint-root");
+  };
 
   // ---------- iframe support ----------
   // captureVisibleTab crops in TOP-document viewport coordinates, but inside an iframe our rects
