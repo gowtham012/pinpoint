@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Pinpoint test app</title>
+<style>
+  body { font-family: system-ui; margin: 0; }
+  header { display: flex; justify-content: space-between; padding: 16px 32px; background: #111; color: #fff; }
+  .hero { padding: 64px 32px; background: #f6f5ff; }
+  .hero h1 { font-size: 40px; margin: 0 0 8px; }
+  .cta { background: #6e56cf; color: #fff; border: 0; padding: 12px 20px; border-radius: 8px; font-size: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 32px; }
+  .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+  .card h3 { margin-top: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/react.development.js"></script>
+<script src="/react-dom.development.js"></script>
+<script>
+  const h = React.createElement;
+  function Header() { return h("header", null, h("strong", null, "Acme"), h("nav", null, h("a", { href: "#" }, "Docs"), " ", h("a", { href: "#" }, "Pricing"))); }
+  function Hero() {
+    return h("section", { className: "hero" },
+      h("h1", null, "Ship UI changes without screenshots"),
+      h("p", null, "Click, comment, done."),
+      h("button", { className: "cta", id: "get-started", "data-testid": "cta" }, "Get started"));
+  }
+  function Card({ title, body }) { return h("div", { className: "card" }, h("h3", null, title), h("p", null, body)); }
+  function Cards() { return h("div", { className: "cards" }, ["Fast", "Precise", "Agent-agnostic"].map((t) => h(Card, { key: t, title: t, body: "Lorem ipsum dolor sit amet." }))); }
+  function App() { return h(React.Fragment, null, h(Header), h(Hero), h(Cards)); }
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>

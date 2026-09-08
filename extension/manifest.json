@@ -1,0 +1,80 @@
+{
+  "manifest_version": 3,
+  "name": "Pinpoint \u2014 annotate any page for your coding agent",
+  "version": "0.4.0",
+  "description": "Click an element on your local dev site, write what should change, and send it to Claude Code, Cursor or Codex. No screenshots on disk.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pinpoint (Alt+Shift+A to pick an element)"
+  },
+  "commands": {
+    "toggle-picker": {
+      "suggested_key": {
+        "default": "Alt+Shift+A"
+      },
+      "description": "Start / stop picking an element"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "https://localhost/*",
+        "http://127.0.0.1/*",
+        "https://127.0.0.1/*",
+        "http://*.localhost/*",
+        "http://*.local/*",
+        "https://*.local/*",
+        "http://*.test/*",
+        "https://*.test/*",
+        "file:///*"
+      ],
+      "js": [
+        "inspector.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "https://localhost/*",
+        "http://127.0.0.1/*",
+        "https://127.0.0.1/*",
+        "http://*.localhost/*",
+        "http://*.local/*",
+        "https://*.local/*",
+        "http://*.test/*",
+        "https://*.test/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

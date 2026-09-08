@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 320px; margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #eee; }
+  header h1 { font-size: 14px; margin: 0; flex: 1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+  .dot.on { background: #2a9d5c; } .dot.off { background: #e5484d; }
+  .status { font-size: 11px; color: #777; }
+  main { padding: 12px 14px; display: grid; gap: 8px; }
+  button { border: 0; border-radius: 8px; padding: 9px 12px; font: 600 13px inherit; cursor: pointer; background: #f1f1f3; color: #222; text-align: left; display: flex; align-items: center; gap: 8px; }
+  button:hover { background: #e4e4e8; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:disabled:hover { background: #f1f1f3; }
+  button.primary { background: #6e56cf; color: #fff; } button.primary:hover { background: #5b46b3; }
+  button kbd { margin-left: auto; font: 11px ui-monospace, Menlo, monospace; opacity: .7; }
+  ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; border-top: 1px solid #eee; }
+  li { padding: 8px 14px; border-bottom: 1px solid #f2f2f2; display: flex; gap: 8px; align-items: flex-start; }
+  li .n { background: #e5484d; color: #fff; border-radius: 999px; min-width: 20px; height: 20px; font: 700 11px/20px inherit; text-align: center; padding: 0 5px; flex-shrink: 0; }
+  li .c { flex: 1; min-width: 0; }
+  li .c .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .c .s { font: 10px ui-monospace, Menlo, monospace; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .c .u { font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .c .u.current { color: #6e56cf; }
+  li .x { color: #aaa; cursor: pointer; padding: 0 2px; } li .x:hover { color: #e5484d; }
+  .empty { padding: 14px; color: #888; text-align: center; font-size: 12px; }
+  footer { padding: 8px 14px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: center; font-size: 11px; color: #777; }
+  footer input { width: 52px; border: 1px solid #ddd; border-radius: 6px; padding: 3px 6px; font: inherit; }
+  footer select { border: 1px solid #ddd; border-radius: 6px; padding: 3px 4px; font: inherit; background: #fff; }
+  footer a { color: #6e56cf; margin-left: auto; text-decoration: none; }
+  .hint { font-size: 11px; color: #888; line-height: 1.4; }
+  .where { display: none; font-size: 11.5px; line-height: 1.45; color: #8a6d1f; background: #fdf6e3; border: 1px solid #f0e2b6; border-radius: 8px; padding: 8px 10px; }
+  button kbd { margin-left: auto; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <h1>Pinpoint</h1>
+    <span class="status" id="status">checking bridge…</span>
+  </header>
+  <main>
+    <div class="where" id="where"></div>
+    <button class="primary" id="pick">✎ <span class="pl">Annotate an element</span> <kbd id="kpick">⌥⇧A</kbd></button>
+    <button id="copyAll">⧉ Copy all as one prompt</button>
+    <button id="clear">🗑 Clear all annotations</button>
+    <button id="showbar">▾ Show the on-page bar here</button>
+    <div class="hint" id="hint"></div>
+  </main>
+  <ul id="list"></ul>
+  <footer>
+    <span>Port</span><input id="port" type="number" min="1024" max="65535" />
+    <span>Bar</span><select id="dockPos"><option value="bl">↙</option><option value="br">↘</option><option value="tl">↖</option><option value="tr">↗</option></select>
+    <a href="#" id="help">Setup guide</a>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

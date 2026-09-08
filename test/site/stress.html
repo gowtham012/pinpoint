@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Stress</title></head><body>
+<div id="app"></div>
+<script>
+// 2000+ nodes, hashed/generated class names, deep nesting, repeated siblings, ids with odd chars.
+const hash = (i) => "css-" + (i * 2654435761 >>> 0).toString(16).slice(0, 6);
+let html = "";
+for (let s = 0; s < 20; s++) {
+  html += `<section class="sec ${hash(s)}"><header class="hdr"><h2>Section ${s}</h2><nav><a href="#">a</a><a href="#">b</a></nav></header><ul class="list _x${s}">`;
+  for (let i = 0; i < 25; i++) {
+    html += `<li class="item ${hash(s*100+i)} sc-AbCd${i}"><span class="lbl">Item ${s}.${i}</span><div class="deep"><div><div><button class="btn">go</button><em>e</em></div></div></div></li>`;
+  }
+  html += `</ul></section>`;
+}
+html += `<div id="weird:id.x"><p>weird id</p></div><div id="dup"></div><div id="dup"><p class="dupchild">duplicate id</p></div>`;
+document.getElementById("app").innerHTML = html;
+</script></body></html>

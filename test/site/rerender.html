@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Re-rendering form</title>
+<style>body{font-family:system-ui;margin:0;padding:20px 20px 60px}
+.field-label{display:block;font-size:11px;text-transform:uppercase;color:#666;margin-bottom:4px}
+.input{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.btn{padding:8px 14px;border:0;border-radius:6px;font-size:14px}
+.btn-primary{background:#6e56cf;color:#fff}.btn-outline{background:#fff;border:1px solid #ccc}
+.check-item{display:inline-flex;gap:6px;align-items:center;border:1px solid #ddd;border-radius:8px;padding:8px 10px;margin:0 6px 6px 0}
+.check-box{width:16px;height:16px;border:1px solid #999;border-radius:3px;display:inline-block}
+.powered-by{position:fixed;z-index:10;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #eee;padding:8px;text-align:center;font-size:11px;color:#888}
+</style></head><body>
+<div id="app"></div>
+<div class="powered-by">Powered by <strong>Acme</strong></div>
+<script>
+// Mimics a real multi-step form: every step change replaces the DOM wholesale via innerHTML,
+// and both steps use the same class names in different orders.
+let step = 1;
+const STEPS = {
+  1: { title: "Contact", fields: [["first_name","First Name"],["last_name","Last Name"],["company_address","Company Address"]],
+       chips: ["Major Systems Controls","Building Automation","Other"] },
+  2: { title: "Company", fields: [["segment","Segment"],["company_website","Company Website"],["company_size","Company Size"]],
+       chips: ["Midwest (MI/WI)","Northeast","South"] },
+};
+function render() {
+  const s = STEPS[step];
+  document.getElementById("app").innerHTML = `
+    <h2 id="page-title">${s.title}</h2>
+    <div class="grid">
+      ${s.fields.map(([id,label]) => `<div><label class="field-label" for="${id}"><span>${label}</span></label><input class="input" id="${id}" data-field="${id}"></div>`).join("")}
+    </div>
+    <div id="chips">
+      ${s.chips.map((c,i) => `<label class="check-item"><input type="checkbox" data-array="cat" value="${c}" style="display:none"><span class="check-box"></span><span class="txt">${c}</span></label>`).join("")}
+    </div>
+    <div style="margin-top:16px">
+      ${step > 1 ? '<button class="btn btn-outline" data-action="prev">Back</button> ' : ""}
+      <button class="btn btn-primary" data-action="next">${step === 1 ? "Continue to Step 2" : "Submit"}</button>
+    </div>`;
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("[data-action]");
+  if (!a) return;
+  step = a.dataset.action === "next" ? 2 : 1;
+  render();
+});
+render();
+window.__setStep = (n) => { step = n; render(); };
+</script></body></html>

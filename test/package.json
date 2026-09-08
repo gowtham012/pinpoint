@@ -1,0 +1,17 @@
+{
+  "name": "pinpoint-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-reporter=spec bridge.test.mjs e2e.test.mjs",
+    "test:bridge": "node --test --test-reporter=spec bridge.test.mjs",
+    "test:e2e": "node --test --test-reporter=spec e2e.test.mjs",
+    "postinstall": "echo 'Run: npx playwright install chromium'"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "react": "^18",
+    "react-dom": "^18",
+    "vue": "^3"
+  }
+}

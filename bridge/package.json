@@ -1,0 +1,44 @@
+{
+  "name": "pinpoint-bridge",
+  "version": "0.4.0",
+  "description": "Local bridge between the Pinpoint browser extension and coding agents (Claude Code, Cursor, Codex) over MCP.",
+  "type": "module",
+  "bin": {
+    "pinpoint-bridge": "./cli.js"
+  },
+  "main": "./daemon.js",
+  "scripts": {
+    "start": "node cli.js",
+    "mcp": "node cli.js mcp"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "claude-code",
+    "cursor",
+    "codex",
+    "frontend",
+    "annotations",
+    "developer-tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gowtham012/pinpoint.git",
+    "directory": "bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/gowtham012/pinpoint/issues"
+  },
+  "homepage": "https://github.com/gowtham012/pinpoint#readme",
+  "files": [
+    "*.js",
+    "README.md"
+  ]
+}

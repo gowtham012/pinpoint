@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Vue test</title></head><body>
+<div id="app"></div>
+<script src="/vue.global.js"></script>
+<script>
+const { createApp, h } = Vue;
+const PriceCard = { name: "PriceCard", props: ["tier"], render() { return h("div", { class: "price" }, [h("h2", null, this.tier), h("button", { class: "buy" }, "Buy " + this.tier)]); } };
+const Pricing = { name: "Pricing", render() { return h("section", { id: "pricing" }, ["Free", "Pro"].map((t) => h(PriceCard, { tier: t, key: t }))); } };
+createApp({ name: "Root", render: () => h("main", null, [h("h1", null, "Vue app"), h(Pricing)]) }).mount("#app");
+</script></body></html>

@@ -1,0 +1,10 @@
+
+# test byproducts
+*.log
+.DS_Store
+.pinpoint/
+node_modules/
+package-lock.json
+test/*.png
+test/site/registration.html
+test/ux/

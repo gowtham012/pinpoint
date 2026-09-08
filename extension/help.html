@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Pinpoint setup</title>
+<style>body{font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:720px;margin:48px auto;padding:0 24px;color:#111}code,pre{background:#f4f4f6;border-radius:6px;font-size:13px}code{padding:2px 6px}pre{padding:12px 14px;overflow:auto}h1{font-size:24px}h2{font-size:17px;margin-top:34px}kbd{background:#eee;border-radius:4px;padding:1px 6px;font-size:12px}.note{color:#666;font-size:13px}</style></head><body>
+<h1>Pinpoint setup</h1>
+<p>Click an element in your browser, say what should change, and your coding agent does it.</p>
+
+<h2>1. Start the bridge</h2>
+<p>Keep this running in a terminal while you work — it is what connects the browser to your agent.</p>
+<pre>cd pinpoint/bridge
+npm install
+node cli.js --project /path/to/your/app</pre>
+<p class="note">The popup's status dot turns green once it can see the bridge. Port 7331 by default; use <code>--port</code> and the popup's "Bridge port" field if something else has it.</p>
+
+<h2>2. Connect your agent</h2>
+<p><b>Claude Code</b> — register it, then let annotations arrive by themselves:</p>
+<pre>claude mcp add pinpoint -s user -- node /ABS/PATH/pinpoint/bridge/cli.js mcp
+node /ABS/PATH/pinpoint/bridge/cli.js install-hooks /path/to/your/app</pre>
+<p class="note">The second line adds two hooks to your project's <code>.claude/settings.json</code>. After that you never have to mention Pinpoint: whatever you have marked in the browser rides along with your next message. Existing settings are preserved.</p>
+<p><b>Cursor</b> — <code>.cursor/mcp.json</code></p>
+<pre>{ "mcpServers": { "pinpoint": { "command": "node", "args": ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"] } } }</pre>
+<p><b>Codex</b> — <code>~/.codex/config.toml</code></p>
+<pre>[mcp_servers.pinpoint]
+command = "node"
+args = ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"]</pre>
+<p><b>Anything else</b>: MCP over HTTP at <code>http://127.0.0.1:7331/mcp</code>, or read <code>.pinpoint/pending.md</code> in your project, or use <i>Copy prompt</i> and paste into any chat.</p>
+
+<h2>3. Annotate</h2>
+<p>A small bar appears in the corner of every page while the bridge is running — that is Pinpoint telling you it is live in this tab. Click it, or press <kbd>⌥</kbd><kbd>⇧</kbd><kbd>A</kbd> (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> on Windows/Linux).</p>
+<p>Then click an element, type the change, and press <kbd>⌘</kbd><kbd>↩</kbd> / <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. Comment mode <b>stays on</b>, so the next note is just another click — press <kbd>Esc</kbd> when you have finished. The bar's counter opens a list of everything marked on this page; its <b>×</b> hides it for that site, and the toolbar popup brings it back or moves it to another corner.</p>
+<p>A numbered pin stays on the element until your agent marks it done, at which point it disappears on its own — that is how you know the change has been made.</p>
+
+<h2>Useful commands</h2>
+<pre>node cli.js status                 # running? how many pending?
+node cli.js print                  # pending annotations as markdown
+node cli.js resolve &lt;id&gt;           # mark one done by hand
+node cli.js clear                  # delete everything
+node cli.js --help</pre>
+</body></html>

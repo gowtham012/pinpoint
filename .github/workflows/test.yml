@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the bridge
+        working-directory: bridge
+        run: npm install --no-audit --no-fund
+
+      - name: Install test dependencies
+        working-directory: test
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        working-directory: test
+        run: npx playwright install --with-deps chromium
+
+      # The bridge, the CLI, the hooks and every MCP tool over both transports.
+      - name: Bridge and MCP tests
+        working-directory: test
+        run: node --test --test-reporter=spec bridge.test.mjs
+
+      # Loads the unpacked extension into a real headless Chromium and drives real pages.
+      - name: Browser tests
+        working-directory: test
+        run: node --test --test-reporter=spec e2e.test.mjs

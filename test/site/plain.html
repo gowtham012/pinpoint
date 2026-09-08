@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Plain page</title>
+<style>body{margin:0;font-family:sans-serif} .wide{width:3000px;height:40px;background:#cde} .tall{height:2500px} #bottom{margin:20px;padding:10px;background:#fc9} </style></head><body>
+<input id="search" placeholder="search" />
+<p id="longtext"></p>
+<div class="wide" id="wide">wide element</div>
+<my-widget id="widget"></my-widget>
+<iframe id="frame" src="/frame.html" width="400" height="120"></iframe>
+<div class="tall"></div>
+<button id="bottom">Bottom button</button>
+<script>
+document.getElementById("longtext").textContent = "x".repeat(5000);
+class MyWidget extends HTMLElement { constructor(){ super(); const r=this.attachShadow({mode:"open"}); r.innerHTML = '<style>span{background:#ddd;padding:6px;display:inline-block}</style><div class="inner"><span class="chip">Shadow chip</span><span class="chip">Second chip</span></div>'; } }
+customElements.define("my-widget", MyWidget);
+</script></body></html>
