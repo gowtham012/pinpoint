@@ -153,6 +153,10 @@ test("/pending.md serves markdown; CORS preflight ok; non-loopback Host refused"
   assert.equal(ext.status, 200, "extension origin allowed");
   const webPre = await fetch(BASE + "/annotations", { method: "OPTIONS", headers: { origin: "https://evil.example" } });
   assert.equal(webPre.status, 403, "web preflight refused");
+  // The dev site being annotated is served from localhost. It is still a web page, so it must not
+  // be able to read the screenshots, delete notes, or POST instructions the hook feeds to an agent.
+  const localPage = await fetch(BASE + "/annotations", { headers: { origin: "http://localhost:3000" } });
+  assert.equal(localPage.status, 403, "a localhost page origin is refused like any other web page");
   assert.equal((await fetch(BASE + "/whatever")).status, 404);
 });
 
@@ -488,4 +492,50 @@ test("oversized payload is rejected rather than eating memory", async () => {
   const res = await post(huge).catch((e) => ({ status: 0, err: e }));
   assert.ok(res.status === 400 || res.status === 0, `got ${res.status}`);
   assert.equal((await get("/health")).ok, true, "daemon survives");
+});
+
+test("CLI: a flag before the subcommand runs that subcommand, not the daemon", async () => {
+  // `node cli.js --port 7332 status` used to see a leading "-" and fall through to "start",
+  // leaving a long-running server on the terminal of someone who only asked a question.
+  const run = (args) => new Promise((res) => {
+    const p = spawn("node", [CLI, ...args], { env: ENV });
+    let out = "", err = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (err += d));
+    const t = setTimeout(() => { p.kill(); res({ out, err, code: "HUNG" }); }, 6000);
+    p.once("exit", (c) => { clearTimeout(t); res({ out, err, code: c }); });
+  });
+  const r = await run(["--port", "7332", "status"]);
+  assert.notEqual(r.code, "HUNG", "flag-first status must not start a daemon");
+  assert.match(r.out, /bridge NOT running on :7332/);
+});
+
+test("hooks: a path with a space stays quoted, and unrelated hooks survive", async () => {
+  const { hookCommand, installHooks } = await import("../bridge/hooks.js");
+
+  // Unquoted, the shell splits this into `node /Users/me/My` and every prompt fails.
+  const spacey = "/Users/me/My Projects/pinpoint/bridge/cli.js";
+  assert.ok(hookCommand(spacey, {}).includes(`"${spacey}"`), "install path must stay quoted");
+
+  // Ownership used to be a substring test for "pinpoint", so a user's own hook that merely
+  // mentioned pinpoint — or a repo living in a pinpoint/ folder — was silently deleted.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "pp-hooks-"));
+  const settings = path.join(repo, ".claude", "settings.json");
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  const mine = { hooks: [{ type: "command", command: "echo my repo lives in ~/dev/pinpoint" }] };
+  fs.writeFileSync(settings, JSON.stringify({ hooks: { UserPromptSubmit: [mine] } }, null, 2));
+
+  installHooks(repo, CLI, {});
+  const after1 = JSON.parse(fs.readFileSync(settings, "utf8"));
+  assert.ok(
+    after1.hooks.UserPromptSubmit.some((e) => JSON.stringify(e) === JSON.stringify(mine)),
+    "an unrelated hook mentioning pinpoint must survive"
+  );
+
+  // Still idempotent: re-running updates our entry rather than appending a second one.
+  installHooks(repo, CLI, {});
+  const after2 = JSON.parse(fs.readFileSync(settings, "utf8"));
+  const ours = after2.hooks.UserPromptSubmit.filter((e) => JSON.stringify(e).includes("print --hook"));
+  assert.equal(ours.length, 1, "re-running must not duplicate our hook");
+  assert.equal(after2.hooks.UserPromptSubmit.length, 2, "user hook + ours");
 });

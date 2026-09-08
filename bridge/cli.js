@@ -8,13 +8,13 @@ const SELF = fileURLToPath(import.meta.url);
 const USAGE = `pinpoint — send UI change requests from your browser to your coding agent
 
 Usage
-  pinpoint [start]                  start the bridge (browser <-> agent). Leave it running.
-  pinpoint mcp                      run as a stdio MCP server (for Claude Code / Cursor / Codex)
-  pinpoint print                    print pending annotations as markdown
-  pinpoint resolve <id...>          mark annotations done (pins disappear in the browser)
-  pinpoint install-hooks [dir]      set up Claude Code so annotations arrive automatically
-  pinpoint status                   is the bridge running? how many pending?
-  pinpoint clear                    delete all annotations
+  node cli.js [start]                  start the bridge (browser <-> agent). Leave it running.
+  node cli.js mcp                      run as a stdio MCP server (for Claude Code / Cursor / Codex)
+  node cli.js print                    print pending annotations as markdown
+  node cli.js resolve <id...>          mark annotations done (pins disappear in the browser)
+  node cli.js install-hooks [dir]      set up Claude Code so annotations arrive automatically
+  node cli.js status                   is the bridge running? how many pending?
+  node cli.js clear                    delete all annotations
 
 Options
   --port <n>        bridge port (default ${DEFAULT_PORT}, or $PINPOINT_PORT)
@@ -28,12 +28,25 @@ Files
   $PINPOINT_HOME overrides that location
 
 Examples
-  pinpoint --project ~/code/my-app
+  node cli.js --project ~/code/my-app
   claude mcp add pinpoint -s user -- node ${SELF} mcp
 `;
 
 const args = process.argv.slice(2);
-const cmd = args[0] && !args[0].startsWith("-") ? args.shift() : args.some((a) => /^(-h|--help)$/.test(a)) ? "help" : "start";
+// The subcommand may sit after flags (`--port 7332 status`), so find it wherever it is rather
+// than only at position 0 — otherwise a flag-first invocation silently starts a daemon instead.
+const CMDS = ["start", "mcp", "print", "resolve", "install-hooks", "status", "clear", "help"];
+const VALUE_FLAGS = ["--port", "--project"];
+function pickCommand() {
+  // A leading positional is the command, whatever it is — so an unknown one still reports itself
+  // rather than silently starting a daemon.
+  if (args[0] && !args[0].startsWith("-")) return args.shift();
+  // Otherwise look past the flags for a real subcommand, skipping any token that is a flag's value.
+  const i = args.findIndex((a, n) => CMDS.includes(a) && !VALUE_FLAGS.includes(args[n - 1]));
+  if (i >= 0) return args.splice(i, 1)[0];
+  return args.some((a) => /^(-h|--help)$/.test(a)) ? "help" : "start";
+}
+const cmd = pickCommand();
 const opt = (name, def) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : def;
@@ -186,7 +199,15 @@ switch (cmd) {
   case "install-hooks": {
     const { installHooks } = await import("./hooks.js");
     const dir = path.resolve(positionals()[0] || process.cwd());
-    const r = installHooks(dir, SELF, { port });
+    // installHooks throws readable sentences ("no such directory: …"); without this they reach
+    // the user as a raw stack trace, which is exactly the moment a first-timer gives up.
+    let r;
+    try {
+      r = installHooks(dir, SELF, { port });
+    } catch (e) {
+      console.error(`[pinpoint] ${e.message}`);
+      process.exit(1);
+    }
     console.error(`[pinpoint] ${r.message}`);
     console.error(`[pinpoint] ${r.file}`);
     if (r.added.length) console.error(`[pinpoint] hooks: ${r.added.join(", ")}`);
