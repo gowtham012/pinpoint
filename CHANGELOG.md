@@ -22,6 +22,8 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
 - The origin guard admitted `http://localhost` — the dev site being annotated. `SECURITY.md` and
   the README both said otherwise; the code now matches.
 - `setup.sh` defaulted the project to a personal path (`~/Desktop/markus`) in a public repo.
+- `content.js` called `captureScreenshot()`, which is defined nowhere. It never fired because
+  nothing passes `{screenshot: true}`, but it would have thrown for whoever did. Removed.
 - **Windows: the installed hook carried a mangled path.** The path was JSON-escaped rather than
   quoted, so `C:\Users\dev\...` reached the shell as `C:\\Users\\dev\\...`. Windows often
   tolerates doubled separators, but when it does not the only symptom is "Cannot find module" on
@@ -38,6 +40,19 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
   transition is gone.
 
 ### Changed
+- **The bar now opens in the top-right corner** rather than bottom-left, and the popup's corner
+  picker opens on the same default.
+- **Two hues in the bar instead of three.** "You" was `#a8577f`, a mauve unrelated to anything
+  else, so the bar carried violet (h248), mauve (h330) and orange (h18) — three corners of the
+  wheel, which is why it read as muddy. "You" is now the same violet as your pins and the brand
+  mark; orange stays the agent.
+- **The idle agent avatar was an unreadable blob.** Greyscaling the orange fill at 38% produced
+  about `#cacaca`, leaving its white glyph at 1.64:1. It is now drawn as an outline — absent
+  rather than muddy — at 5.26:1.
+- **One optical row.** The bar's children padded 5/10, 5/8, 5/10 and 0/4/0/6 — four rhythms in a
+  200px bar. Every control is now 24px tall on a single horizontal rhythm, the separators are
+  centred, and the `⌥⇧A` keycap has the size and tracking it needs to be legible at all.
+- Your avatar now stacks in front of the agent's, which is what stacked presence means.
 - **The on-page bar is no longer dimmed.** Fading it (`.58` at rest, `.4` minified) put the label
   at 4.4:1, the shortcut keycap at 2.34:1 and the minified bar at 2.55:1 against a white page —
   below the 4.5:1 AA floor. Discretion now comes from size and position.
@@ -52,6 +67,11 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
 - The popup honours `prefers-color-scheme`; it was a white flash in a dark browser.
 
 ### Added
+- **Region selection.** Drag instead of clicking to mark an area rather than a single element.
+  A box has no element of its own, so it is anchored to the deepest element that fully contains
+  it — which is what lets a region pin re-find itself after a re-render exactly as an element pin
+  does, and gives the agent a container to edit plus the list of what the box held. The screenshot
+  crops to the box.
 - README screenshots — the bar idle and picking, the popover, a pin, and a hero shot. Generated
   from the shipped extension by a script that runs its own bridge on a scratch port.
 - `prefers-reduced-motion` support — seven animations ran unconditionally, two of them forever.

@@ -118,6 +118,13 @@ after(async () => { await ctx?.close(); await stopDaemon(); site.close(); fs.rmS
 test("Esc cancels picking; highlight hidden; Esc/Cancel close popover without sending", async () => {
   await clearAll();
   const page = await openPage("/");
+  // This test clicks the page's own nav, which lives top-right — exactly where the bar now sits by
+  // default, so the bar really does intercept it. Park the bar in the far corner: what is under
+  // test here is Esc/Cancel, not placement.
+  await page.evaluate(() => {
+    const d = document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock");
+    d.classList.remove("pos-tr"); d.classList.add("pos-bl");
+  });
   await arm(page);
   await page.locator("h1").hover();
   assert.equal((await S(page)).hl, "block");
@@ -762,7 +769,7 @@ const dock = (page) => page.evaluate(() => {
     count: r.querySelector(".dock .count b").textContent,
     countShown: r.querySelector(".dock .count").style.display !== "none",
     hint: r.querySelector(".dock .hint").textContent,
-    bottom: cs.bottom,
+    bottom: cs.bottom, top: cs.top, right: cs.right,
     panelOpen: r.querySelector(".panel").style.display === "flex",
   };
 });
@@ -776,7 +783,8 @@ test("the dock says Pinpoint is live in this tab, and doubles as the on/off swit
   assert.equal(d.armed, false);
   assert.equal(d.countShown, false, "no note count until there is something to count");
   assert.match(d.hint, /Alt\+Shift\+A|⌥⇧A/, "tells you the shortcut when idle");
-  assert.equal(d.bottom, "16px", "sits at the bottom so it never covers a page heading");
+  assert.equal(d.top, "16px", "defaults to the top-right corner");
+  assert.equal(d.right, "16px", "defaults to the top-right corner");
 
   // clicking it arms the picker — no keyboard needed
   await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .toggle").click());
@@ -790,6 +798,74 @@ test("the dock says Pinpoint is live in this tab, and doubles as the on/off swit
   await page.keyboard.press("Escape");
   assert.equal((await S(page)).picking, false, "Esc turns it off");
   assert.equal((await dock(page)).armed, false);
+  await page.close();
+});
+
+test("drag marks a region: anchored to the container, cropped to the box", async () => {
+  await clearAll();
+  const page = await openPage("/");
+  await arm(page);
+
+  // Drag a box across the card grid — an area, not one element.
+  const grid = await page.locator(".cards").boundingBox();
+  const from = { x: grid.x + 8, y: grid.y + 8 };
+  const to = { x: grid.x + grid.width - 8, y: grid.y + Math.min(160, grid.height - 8) };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 40, from.y + 30, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  // the marquee is on screen mid-drag, with its running size
+  const marquee = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot.querySelector(".marquee");
+    return { shown: getComputedStyle(r).display, size: r.querySelector(".size").textContent };
+  });
+  assert.equal(marquee.shown, "block", "a drag draws the marquee");
+  assert.match(marquee.size, /\d+ × \d+/, "and shows the size as you go");
+  await page.mouse.up();
+
+  assert.equal((await S(page)).popOpen, true, "releasing opens the comment box");
+  await page.evaluate(() => {
+    const t = document.querySelector("pinpoint-root").shadowRoot.querySelector("textarea");
+    t.value = "make these cards two-up on mobile";
+    t.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".send").click());
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 1, null, { timeout: 6000 });
+
+  const [a] = await pending();
+  assert.ok(a.region, "the annotation carries a region");
+  assert.ok(a.region.width > 100 && a.region.height > 40, `region looks real: ${JSON.stringify(a.region)}`);
+  assert.ok(a.region.contains.length >= 2, "and lists what is inside it");
+  // anchored to a container that actually holds the box, not to one of the cards
+  assert.match(a.element.selector, /cards|root|body|div/, `anchor was ${a.element.selector}`);
+  const holds = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width >= 200 && r.height >= 40;
+  }, a.element.selector);
+  assert.ok(holds, "the anchor is a real container on the page");
+
+  // The overlay is hidden while the worker takes its crop, and a hidden host makes every
+  // descendant report a zero rect — wait for it back before measuring anything.
+  await page.waitForFunction(
+    () => document.querySelector("pinpoint-root").style.display !== "none",
+    null, { timeout: 8000 }
+  );
+
+  // the pin sits on the region's own corner, not the anchor's
+  const placed = await page.evaluate(() => {
+    const pin = document.querySelector("pinpoint-root").shadowRoot.querySelector(".pin");
+    const b = pin.getBoundingClientRect();
+    const cs = getComputedStyle(pin);
+    return { x: b.x, y: b.y, display: cs.display, left: pin.style.left, top: pin.style.top, orphan: pin.dataset.orphan || null };
+  });
+  // The point of anchoring is that the pin lands on the BOX, not on the container that holds it.
+  const scroll = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+  const wantY = a.region.y - scroll.y;
+  const wantX = a.region.x + a.region.width - scroll.x;
+  assert.ok(Math.abs(placed.y - wantY) <= 24, `pin y ${Math.round(placed.y)} should track region top ${Math.round(wantY)} — ${JSON.stringify(placed)}`);
+  assert.ok(Math.abs(placed.x - wantX) <= 40, `pin x ${Math.round(placed.x)} should track the region right edge ${Math.round(wantX)}`);
   await page.close();
 });
 

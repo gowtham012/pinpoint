@@ -114,7 +114,7 @@ $("#help").onclick = (e) => {
   chrome.tabs.create({ url: chrome.runtime.getURL("help.html") });
 };
 
-chrome.storage.sync.get({ port: 7331, dockPos: "bl" }).then(({ port, dockPos }) => {
+chrome.storage.sync.get({ port: 7331, dockPos: "tr" }).then(({ port, dockPos }) => {
   $("#port").value = port;
   $("#dockPos").value = dockPos;
 });
