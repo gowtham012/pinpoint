@@ -1,6 +1,10 @@
 // MCP server definition, shared by the stdio entrypoint and the daemon's /mcp endpoint.
 // `api` abstracts where annotations live (direct store in the daemon, HTTP client in stdio mode).
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createRequire } from "node:module";
+// One source of truth: the server announced 0.1.0 while the package said 0.4.0, and that string
+// is what every MCP client shows in its server list.
+const VERSION = createRequire(import.meta.url)("./package.json").version;
 import { z } from "zod";
 import { pendingMarkdown, summaryLine, toMarkdown } from "./store.js";
 
@@ -10,7 +14,7 @@ function imageBlock(a) {
 
 export function createMcpServer(api) {
   const server = new McpServer(
-    { name: "pinpoint", version: "0.1.0" },
+    { name: "pinpoint", version: VERSION },
     {
       instructions:
         "Pinpoint delivers UI change requests the developer made by clicking elements in their own browser. " +
