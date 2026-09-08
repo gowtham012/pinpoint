@@ -53,6 +53,20 @@ export function toMarkdown(a, { heading = true, channel = "mcp" } = {}) {
     `- Element: \`${e.selector}\``,
     `- DOM path: ${e.domPath}`
   );
+  // A region annotation marks an area rather than one element. The element above is the container
+  // it was anchored to — the change usually belongs there, not on any single child.
+  if (a.region) {
+    lines.push(
+      `- **This is a region**, not a single element: a ${a.region.width}×${a.region.height}px area` +
+        ` inside \`${e.selector}\`. Treat that element as the thing to change unless the comment says otherwise.`
+    );
+    if (a.region.contains?.length) {
+      lines.push(`- The region contains ${a.region.contains.length} element(s):`);
+      for (const c of a.region.contains.slice(0, 12)) {
+        lines.push(`    - \`${c.selector}\`` + (c.text ? ` — "${c.text}"` : ""));
+      }
+    }
+  }
   if (e.text) {
     const tt = e.styles?.["text-transform"];
     lines.push(`- Text as rendered: "${e.text}"` + (tt && tt !== "none" ? ` (CSS text-transform: ${tt} — the source string will differ, grep the HTML below instead)` : ""));

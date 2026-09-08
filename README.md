@@ -65,22 +65,30 @@ Anywhere else — a staging URL, or a private LAN address like `192.168.1.5:3000
 
 ## Using it
 
-While the bridge is running, a small bar sits in the corner of every page — that is how you know Pinpoint is live in this tab. Click it (or press **⌥⇧A** / **Alt+Shift+A**) to start marking.
+While the bridge is running, a small bar sits in the **top-right** corner of every page — that is how you know Pinpoint is live in this tab. Click it (or press **⌥⇧A** / **Alt+Shift+A**) to start marking. The toolbar popup moves it to any corner.
 
 Comment mode stays on. Click an element, type what should change, press **⌘↩** / **Ctrl+Enter**, and you are immediately ready for the next one — no shortcut in between. **Esc** when you are done, or click **Stop** on the bar. While you are marking the bar is click-through, so it can never sit between you and the element you want — Stop is the one part of it that still takes a click.
 
 Hovering outlines each element and names its React/Vue component, with a comment cursor so the mode is obvious.
 
-| | |
-|---|---|
-| ![The bar, idle](docs/images/bar-idle.png) | ![The bar while picking, with a Stop control](docs/images/bar-armed.png) |
-| Idle — it tells you the shortcut. | Picking. The bar is click-through so it can never block the element you are aiming at; **Stop** is the exception. |
+| | | |
+|---|---|---|
+| ![The bar, idle](docs/images/bar-idle.png) | ![The bar resting as a dot](docs/images/bar-mini.png) | ![The bar while picking, with a Stop control](docs/images/bar-armed.png) |
+| It tells you the shortcut, and who is here — you, and your agent. | After a few seconds it settles to a dot, out of your way. Hover to bring it back. | Picking. The bar is click-through so it can never block the element you are aiming at; **Stop** is the exception. |
 
 ![The comment popover on a form field, showing the element it picked](docs/images/popover.png)
 
 The popover names exactly what you picked, so you can tell two near-identical buttons apart before you type.
 
 ![A numbered pin on the annotated field](docs/images/pin.png)
+
+### Marking an area, not one element
+
+Some changes are about a group, not a control — *"make these cards two-up on mobile"*. **Drag** instead of clicking and you get a box.
+
+![Dragging a region across a group of checkboxes](docs/images/region.png)
+
+A box has no element of its own, so it is anchored to the **deepest element that fully contains it**. That is what lets a region pin survive a re-render exactly as an element pin does, and it means your agent gets a real container to change — plus the list of what the box contained, and a screenshot cropped to the box — rather than four coordinates.
 
 The bar also shows who is present: you, and your coding agent. When the agent reads your notes, opens one, or finishes one, its avatar lights up and the bar says what it is doing — the note it is looking at gets a ring, and a note it completes disappears in front of you. The bar's counter opens a list of everything marked on the page; click a row to jump to it. The **×** hides the bar for that site (the toolbar popup brings it back, and can move it to any corner).
 

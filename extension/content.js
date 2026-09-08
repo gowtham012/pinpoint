@@ -21,6 +21,7 @@
     <style>
       :host {
         --accent: #6d5ae6;
+        --agent: #b8582e;
         --accent-ink: #ffffff;
         --surface: rgba(255,255,255,.97);
         --surface-2: #f4f4f6;
@@ -39,6 +40,7 @@
           --surface-2: #2a2a30;
           --ink: #f2f2f5;
           --ink-dim: #a1a1ab;
+          --agent: #e08a5b;
           --line: rgba(255,255,255,.12);
           --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
         }
@@ -92,7 +94,7 @@
       .dock.pos-tr { bottom: auto; top: 16px; left: auto; right: 16px; }
       .dock.mini .label, .dock.mini .hint, .dock.mini .sep, .dock.mini .close { display: none; }
       .dock.mini { padding: 3px; }
-      .dock.mini .toggle { padding: 5px 7px; }
+      .dock.mini .toggle { padding: 0 6px; }
       /* While picking, every click belongs to the page: the bar goes inert so it can never sit
          between you and the element you want, wherever it is. Esc (or the shortcut) stops. */
       .dock.armed { pointer-events: none; }
@@ -102,7 +104,7 @@
       .dock .stop { display: none; }
       .dock.armed .stop {
         display: inline-flex; align-items: center; pointer-events: auto;
-        border-radius: 999px; padding: 5px 10px; line-height: 1; font-weight: 600;
+        border-radius: 999px; height: 24px; padding: 0 10px; line-height: 1; font-weight: 600;
         /* Ink on surface, NOT accent-ink: only the toggle pill turns violet when armed — the bar
            itself stays var(--surface). White-on-white measured 1.00:1, i.e. invisible. This pair
            inverts with the theme (17.9:1 light, 15.2:1 dark) and stays distinct from the violet
@@ -112,9 +114,13 @@
       .dock.armed .stop:hover { background: color-mix(in srgb, var(--ink) 82%, var(--surface)); }
       .dock.armed .label { display: none; }
       .dock.armed .sep, .dock.armed .close { display: none; }
-      .dock.mini .count { padding: 5px 8px; }
+      .dock.mini .count { padding: 0 8px; }
       .dock.armed { opacity: 1; border-color: var(--accent); }
-      .dock button { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px; line-height: 1; }
+      /* Every direct child sits on the same 24px optical row, with one horizontal rhythm.
+         Before, the toggle padded 5/10, close 5/8, count 5/10 and .who 0/4/0/6 — four different
+         rhythms in a 200px bar. */
+      .dock button { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+                     height: 24px; padding: 0 10px; line-height: 1; }
       .dock button:hover { background: var(--surface-2); }
       .dock .toggle { font-weight: 600; }
       .dock.armed .toggle { background: var(--accent); color: var(--accent-ink); }
@@ -124,14 +130,25 @@
       @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
       .dock .hint { color: var(--ink-dim); font-size: 11px; }
       .dock.armed .hint { color: var(--accent-ink); opacity: .85; }
-      .dock kbd { font: 10px/1 var(--mono); border: 1px solid currentColor; opacity: .65; border-radius: 4px; padding: 2px 4px; }
+      .dock kbd { font: 11px/1 var(--mono); letter-spacing: .06em; border: 1px solid currentColor;
+                  opacity: .5; border-radius: 4px; padding: 3px 5px 3px 6px;
+                  display: inline-flex; align-items: center; }
       /* who is here — you, and your coding agent when it is doing something */
-      .who { display: inline-flex; align-items: center; padding: 0 4px 0 6px; }
-      .av { width: 19px; height: 19px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-            box-shadow: 0 0 0 2px var(--surface); color: #fff; flex: none; }
-      .av.you { background: #a8577f; }
-      .av.agent { background: #b8582e; margin-left: -6px; opacity: .38; filter: grayscale(1); transition: opacity 200ms ease, filter 200ms ease; }
-      .dock.agent-live .av.agent { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, #b8582e 45%, transparent); }
+      /* Two hues, both of which mean something: violet is you (the same violet as your pins and
+         the brand mark), orange is the agent. The old palette also carried #a8577f for "you" — a
+         mauve unrelated to either, so the bar showed three hues from three corners of the wheel
+         (h248, h330, h18) and read as muddy rather than designed. */
+      .who { display: inline-flex; align-items: center; gap: 0; }
+      .av { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 0 2px var(--surface); color: var(--accent-ink); flex: none; }
+      .av.you { background: var(--accent); position: relative; z-index: 1; }
+      /* Idle, the agent is absent — drawn as an outline, not a colour. Greyscaling the orange fill
+         produced ~#cacaca, which left its white glyph at 1.64:1: a blob you cannot read. */
+      .av.agent { background: var(--surface); color: var(--ink-dim); margin-left: -6px;
+                  box-shadow: 0 0 0 2px var(--surface), inset 0 0 0 1px var(--line);
+                  transition: background 200ms ease, color 200ms ease, box-shadow 200ms ease; }
+      .dock.agent-live .av.agent { background: var(--agent); color: var(--accent-ink);
+                  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--agent) 40%, transparent); }
       .dock.agent-live .av.agent svg { animation: spin 2.6s linear infinite; }
       @keyframes spin { to { transform: rotate(360deg) } }
       .agent-say { color: var(--ink-dim); font-size: 11px; max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
@@ -141,8 +158,25 @@
       .dock.mini.agent-live .who { display: inline-flex; }
       .dock .count { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
       .dock .count b { color: var(--ink); font-weight: 600; }
-      .dock .sep { width: 1px; height: 16px; background: var(--line); margin: 0 2px; flex: none; }
-      .dock .close { color: var(--ink-dim); padding: 5px 8px; font-size: 13px; }
+      .dock .sep { width: 1px; height: 14px; background: var(--line); margin: 0 4px; flex: none; align-self: center; }
+      .dock .close { color: var(--ink-dim); height: 24px; width: 24px; padding: 0; font-size: 14px;
+                     justify-content: center; }
+
+      /* ---------- region marquee: drag to take a whole area, not one element ---------- */
+      .marquee {
+        position: fixed; display: none; pointer-events: none; z-index: 3;
+        border: 1px dashed var(--accent); border-radius: 3px;
+        background: color-mix(in srgb, var(--accent) 7%, transparent);
+      }
+      .marquee::after {
+        content: ""; position: absolute; left: -4px; top: -4px; width: 8px; height: 8px;
+        border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface);
+      }
+      .marquee .size {
+        position: absolute; right: 0; bottom: -21px; font: 500 10px/1 var(--mono);
+        background: var(--accent); color: var(--accent-ink); padding: 4px 5px; border-radius: 4px;
+        white-space: nowrap;
+      }
 
       /* ---------- comment popover ---------- */
       .pop {
@@ -189,7 +223,7 @@
         transition: transform 100ms cubic-bezier(.2,.8,.2,1);
       }
       .pin:hover { transform: translate(-50%, -50%) scale(1.15); }
-      .pin.watched { box-shadow: 0 2px 8px rgba(0,0,0,.28), 0 0 0 2px var(--surface), 0 0 0 6px rgba(184,88,46,.45); }
+      .pin.watched { box-shadow: 0 2px 8px rgba(0,0,0,.28), 0 0 0 2px var(--surface), 0 0 0 6px color-mix(in srgb, var(--agent) 45%, transparent); }
       .pin.new { animation: drop 320ms cubic-bezier(.2,1.2,.3,1); }
       @keyframes drop { from { transform: translate(-50%, -180%) scale(.4); opacity: 0 } }
 
@@ -244,6 +278,7 @@
     </style>
 
     <div class="hl"><div class="tag"></div></div>
+    <div class="marquee"><span class="size"></span></div>
 
     <div class="dock">
       <button class="toggle"><span class="mark"></span><span class="label">Pinpoint</span><span class="hint"></span></button>
@@ -283,6 +318,8 @@
     hl: shadow.querySelector(".hl"),
     tag: shadow.querySelector(".hl .tag"),
     dock: shadow.querySelector(".dock"),
+    marquee: shadow.querySelector(".marquee"),
+    marqueeSize: shadow.querySelector(".marquee .size"),
     dockToggle: shadow.querySelector(".dock .toggle"),
     dockStop: shadow.querySelector(".dock .stop"),
     dockHint: shadow.querySelector(".dock .hint"),
@@ -672,7 +709,7 @@
       dockHidden = !!v[HIDE_KEY];
     } catch {}
     try {
-      const { dockPos } = await chrome.storage.sync.get({ dockPos: "bl" });
+      const { dockPos } = await chrome.storage.sync.get({ dockPos: "tr" });
       ui.dock.classList.remove("pos-br", "pos-tl", "pos-tr");
       if (dockPos !== "bl") ui.dock.classList.add("pos-" + dockPos);
     } catch {}
@@ -801,6 +838,96 @@
     openPopover(t);
   }, true);
 
+  // ---------- region selection ----------
+  // Click takes one element; drag takes an area. A box has no element of its own, so it is
+  // anchored to the deepest element that fully contains it — which is what lets the pin re-find
+  // itself after a re-render, exactly as an element pin does, and gives the agent a real
+  // container to edit rather than four loose coordinates.
+  let selectedRegion = null;
+  let dragFrom = null, dragging = false;
+
+  const boxOf = (a, b) => ({
+    left: Math.min(a.x, b.x), top: Math.min(a.y, b.y),
+    width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y),
+  });
+
+  function anchorFor(box) {
+    const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    let el = document.elementFromPoint(cx, cy);
+    if (!el || isOurs(el)) el = document.body;
+    for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+      if (isOurs(n)) continue;
+      const r = n.getBoundingClientRect();
+      if (r.left <= box.left + 1 && r.top <= box.top + 1 &&
+          r.right >= box.left + box.width - 1 && r.bottom >= box.top + box.height - 1) return n;
+    }
+    return document.body;
+  }
+
+  // The outermost elements wholly inside the box — what the region actually contains, without
+  // listing every descendant of every card.
+  function containedIn(anchor, box, limit = 12) {
+    const out = [];
+    for (const el of anchor.querySelectorAll("*")) {
+      if (out.length >= limit) break;
+      if (isOurs(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.left >= box.left - 1 && r.top >= box.top - 1 &&
+          r.right <= box.left + box.width + 1 && r.bottom <= box.top + box.height + 1 &&
+          !out.some((o) => o.contains(el))) out.push(el);
+    }
+    return out;
+  }
+
+  // Pointer events, not mouse events: the suppression block below preventDefaults pointerdown,
+  // and per spec that cancels the compatibility mousedown/mouseup/click that would otherwise
+  // follow — so a mousedown listener here would never fire at all.
+  document.addEventListener("pointerdown", (e) => {
+    if (!picking || isOurs(e.target)) return;
+    dragFrom = { x: e.clientX, y: e.clientY };
+    dragging = false;
+  }, true);
+
+  document.addEventListener("pointermove", (e) => {
+    if (!picking || !dragFrom) return;
+    const to = { x: e.clientX, y: e.clientY };
+    if (!dragging && Math.hypot(to.x - dragFrom.x, to.y - dragFrom.y) < 6) return;
+    dragging = true;
+    ui.hl.style.display = "none";           // one selection idiom at a time
+    const b = boxOf(dragFrom, to);
+    Object.assign(ui.marquee.style, {
+      display: "block", left: b.left + "px", top: b.top + "px",
+      width: b.width + "px", height: b.height + "px",
+    });
+    ui.marqueeSize.textContent = `${Math.round(b.width)} × ${Math.round(b.height)}`;
+  }, true);
+
+  document.addEventListener("pointerup", (e) => {
+    if (!picking || !dragFrom) return;
+    const from = dragFrom;
+    dragFrom = null;
+    if (!dragging) return;                  // a plain click — the click handler owns it
+    dragging = false;
+    ui.marquee.style.display = "none";
+    const box = boxOf(from, { x: e.clientX, y: e.clientY });
+    if (box.width < 12 || box.height < 12) return;   // a twitch, not a drag
+    const anchor = anchorFor(box);
+    const inside = containedIn(anchor, box);
+    const ar = anchor.getBoundingClientRect();
+    selected = anchor;
+    selectedRegion = {
+      x: Math.round(box.left + window.scrollX), y: Math.round(box.top + window.scrollY),
+      width: Math.round(box.width), height: Math.round(box.height),
+      // offset within the anchor, so the pin can be replaced after the DOM is rebuilt
+      dx: Math.round(box.left - ar.left), dy: Math.round(box.top - ar.top),
+      contains: inside.map((el) => ({ tag: el.tagName.toLowerCase(), selector: uniqueSelector(el), text: clip(el.innerText || "", 60) })),
+    };
+    stopPicking();
+    moveHighlight(anchor, "selected");
+    openPopover(anchor, selectedRegion);
+  }, true);
+
   ["mousedown", "mouseup", "pointerdown", "pointerup"].forEach((ev) =>
     document.addEventListener(ev, (e) => {
       if (picking && targetFromEvent(e)) {
@@ -834,14 +961,20 @@
   }, true);
 
   // ---------- popover ----------
-  function openPopover(el) {
-    const r = el.getBoundingClientRect();
+  function openPopover(el, region = null) {
+    const r = region
+      ? { left: region.x - window.scrollX, top: region.y - window.scrollY,
+          right: region.x - window.scrollX + region.width, bottom: region.y - window.scrollY + region.height }
+      : el.getBoundingClientRect();
     const hint = sourceHint(el);
     const comp = hint.components[0] ? `<b>&lt;${hint.components[0]}&gt;</b> ` : "";
     const file = hint.file ? ` · ${hint.file}${hint.line ? ":" + hint.line : ""}` : "";
     const label = clip(el.innerText || el.getAttribute("aria-label") || el.getAttribute("placeholder") || "", 46);
-    ui.meta.innerHTML = `<div class="row">${comp}${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
-      (label ? `<div class="picked">“${escapeHtml(label)}”</div>` : "");
+    ui.meta.innerHTML = region
+      ? `<div class="row"><b>Region</b> ${region.width}×${region.height} in ${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
+        `<div class="picked">${region.contains.length} element${region.contains.length === 1 ? "" : "s"} inside</div>`
+      : `<div class="row">${comp}${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
+        (label ? `<div class="picked">“${escapeHtml(label)}”</div>` : "");
     ui.text.value = "";
     ui.status.textContent = "";
     ui.status.className = "status";
@@ -852,10 +985,13 @@
     if (top + H > window.innerHeight - M) top = Math.max(M, r.top - H - M);
     Object.assign(ui.pop.style, { left: left + "px", top: top + "px" });
     ui.send.title = `Send to your coding agent (${K_SEND})`;
-    ui.text.placeholder = `What should change here? e.g. make this button full-width on mobile — ${K_SEND} to send`;
+    ui.text.placeholder = region
+      ? `What should change about this area? e.g. make these cards two-up on mobile — ${K_SEND} to send`
+      : `What should change here? e.g. make this button full-width on mobile — ${K_SEND} to send`;
     setTimeout(() => ui.text.focus(), 0);
   }
   function hidePopover() {
+    selectedRegion = null;
     escArmed = false;
     ui.pop.style.display = "none";
     selected = null;
@@ -892,8 +1028,11 @@
   // ---------- annotation payload ----------
   // Where to crop, in top-document viewport coordinates. The worker takes the picture, so a page
   // that navigates the instant it sees "Sent ✓" still gets its screenshot.
-  async function captureRect(el) {
-    const r = el.getBoundingClientRect();
+  async function captureRect(el, override = null) {
+    // A region crops to its own box; an element crops to the element.
+    const r = override
+      ? { left: override.x - window.scrollX, top: override.y - window.scrollY, width: override.width, height: override.height }
+      : el.getBoundingClientRect();
     const off = await getFrameOffset();
     const rect = {
       x: Math.max(0, r.left) + off.x, y: Math.max(0, r.top) + off.y,
@@ -941,7 +1080,9 @@
       source: sourceHint(el),
       screenshot: null,
     };
-    if (opts.screenshot === true) a.screenshot = await captureScreenshot(el);
+    // A region annotation is an element annotation on its anchor, plus the box. Everything
+    // downstream — selector, fingerprint, pin re-finding, styles — keeps working unchanged.
+    if (opts.region) a.region = opts.region;
     return a;
   }
 
@@ -978,14 +1119,15 @@
     setStatus("Sending…");
     ui.send.disabled = true;
     try {
-      const a = await buildAnnotation(el, comment);
-      const capture = await captureRect(el);
+      const region = selectedRegion;
+      const a = await buildAnnotation(el, comment, region ? { region } : {});
+      const capture = await captureRect(el, region);
       if (capture) hideOverlayForCapture();
       // The worker stores the comment first and answers immediately, then takes and attaches the
       // crop on its own. Nothing here is on the page's lifetime.
       const res = await chrome.runtime.sendMessage({ type: "submit", annotation: a, capture });
       if (!res || res.error) { showOverlay(); throw new Error(res?.error || "no response"); }
-      addPin({ id: a.id, number: res.number || pins.length + 1, selector: a.element.selector, comment, el, fp: a.element.fingerprint, fresh: true });
+      addPin({ id: a.id, number: res.number || pins.length + 1, selector: a.element.selector, comment, el, fp: a.element.fingerprint, region, fresh: true });
       setStatus("Sent ✓", "ok");
       // The overlay stays hidden until the worker has taken its picture ("captureDone"), which
       // reads as the popover closing the moment you hit send.
@@ -1040,8 +1182,13 @@
     p.node.style.display = visible ? "block" : "none";
     // Several comments on one element would otherwise land on the same pixel, hiding all but the
     // last. Stack them downwards instead so each stays hoverable and removable.
-    let x = Math.min(r.right, window.innerWidth - 14);
-    let y = Math.max(12, r.top);
+    // A region pin belongs on the box's corner, not the anchor's — the anchor may be far larger
+    // than the area that was marked. The offset was recorded inside the anchor, so it moves with it.
+    const anchored = p.region
+      ? { right: r.left + p.region.dx + p.region.width, top: r.top + p.region.dy }
+      : { right: r.right, top: r.top };
+    let x = Math.min(anchored.right, window.innerWidth - 14);
+    let y = Math.max(12, anchored.top);
     if (taken) {
       const key = () => Math.round(x) + ":" + Math.round(y);
       let guard = 0;
