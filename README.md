@@ -46,6 +46,12 @@ node cli.js install-hooks ~/code/my-app     # so annotations arrive without bein
 
 **5. Restart Claude Code once.** Hooks are only read when a session starts.
 
+> **On Windows:** `$PWD` above is a shell variable — it works in PowerShell and Git Bash, but not
+> in `cmd.exe`. If you are in `cmd.exe`, run `node cli.js --help` and copy the ready-made
+> `claude mcp add …` line it prints at the bottom, which carries the full path already. The
+> keyboard shortcuts are `Alt+Shift+A` and `Ctrl+Enter`, and the UI labels them that way for you.
+> `setup.sh` is macOS-only; follow the numbered steps instead.
+
 In a hurry? `bash setup.sh ~/code/my-app` from the repo root does steps 1, 2 and 4 in one go
 (macOS; it also opens `chrome://extensions` for step 3).
 

@@ -15,9 +15,11 @@ const MARK = "print --hook";
 
 export function hookCommand(cliPath, { port } = {}) {
   const p = port && port !== 7331 ? ` --port ${port}` : "";
-  // Keep the quotes JSON.stringify adds: an install path containing a space is otherwise split
-  // by the shell and every prompt fails with "Cannot find module".
-  return `node ${JSON.stringify(cliPath)} print --hook${p}`;
+  // Quote the path so a space does not split it — an unquoted "C:\Users\My Projects\..." or
+  // "~/My Projects/..." runs as `node /Users/me/My` and every prompt fails with "Cannot find
+  // module". Plain quotes, NOT JSON.stringify: that escapes for JSON, so a Windows path came out
+  // as C:\\Users\\... with doubled separators once it reached the shell.
+  return `node "${cliPath}" print --hook${p}`;
 }
 
 function readJson(file) {
