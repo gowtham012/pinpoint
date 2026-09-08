@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --test-reporter=spec bridge.test.mjs e2e.test.mjs",
+    "test": "node --test --test-reporter=spec --test-concurrency=1 bridge.test.mjs e2e.test.mjs",
     "test:bridge": "node --test --test-reporter=spec bridge.test.mjs",
     "test:e2e": "node --test --test-reporter=spec e2e.test.mjs",
     "postinstall": "echo 'Run: npx playwright install chromium'"
