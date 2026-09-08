@@ -793,6 +793,39 @@ test("the dock says Pinpoint is live in this tab, and doubles as the on/off swit
   await page.close();
 });
 
+test("Stop ends picking with a real click, while the rest of the bar stays inert", async () => {
+  await clearAll();
+  const page = await openPage("/");
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock").style.display === "flex", null, { timeout: 6000 });
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .toggle").click());
+  await page.waitForFunction(() => document.documentElement.classList.contains("pinpoint-picking"));
+
+  // The bar as a whole must stay click-through — it can never block the element you are aiming at.
+  const pe = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    return {
+      bar: getComputedStyle(r.querySelector(".dock")).pointerEvents,
+      stop: getComputedStyle(r.querySelector(".dock .stop")).pointerEvents,
+    };
+  });
+  assert.equal(pe.bar, "none", "the armed bar stays inert");
+  assert.equal(pe.stop, "auto", "but Stop is clickable");
+
+  // A real mouse click at Stop's own coordinates. A scripted .click() would bypass pointer-events
+  // and prove nothing; this is the exact gesture that used to fall through and annotate the page.
+  const box = await page.evaluate(() => {
+    const b = document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .stop").getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  });
+  await page.mouse.click(box.x, box.y);
+
+  await page.waitForFunction(() => !document.documentElement.classList.contains("pinpoint-picking"), null, { timeout: 4000 });
+  assert.equal((await S(page)).picking, false, "clicking Stop ends picking");
+  assert.equal((await dock(page)).armed, false);
+  assert.equal((await pending()).length, 0, "and annotates nothing underneath");
+  await page.close();
+});
+
 test("comment mode stays on: three notes without touching the keyboard shortcut again", async () => {
   await clearAll();
   const page = await openPage("/");

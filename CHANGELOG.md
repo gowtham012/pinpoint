@@ -4,6 +4,54 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
+
+### Fixed
+- **`file://` pages were promised but dead.** Chrome keeps *Allow access to file URLs* off per
+  extension, so the content script never injected — while `isLocalDev()` returned true for `file:`,
+  so the popup offered to annotate and then reported a message asserting `file://` pages work.
+- **`install-hooks` broke on any path containing a space**, because the quotes that made the path
+  safe were stripped. The install reported success and every prompt failed afterwards.
+- **Hook merging deleted unrelated hooks** — ownership was a substring match on `"pinpoint"`, so a
+  user's own hook mentioning it, or any repo in a `pinpoint/` folder, was dropped.
+- **A flag before a subcommand started a daemon**: `cli.js --port 7332 status` answered by running
+  a server instead.
+- `install-hooks` errors reached the user as raw stack traces instead of the sentences it writes.
+- The origin guard admitted `http://localhost` — the dev site being annotated. `SECURITY.md` and
+  the README both said otherwise; the code now matches.
+- `setup.sh` defaulted the project to a personal path (`~/Desktop/markus`) in a public repo.
+- **The browser suite could not run on a fresh clone.** Playwright ≥1.49 launches
+  `chrome-headless-shell` for `headless: true`, which cannot load extensions.
+- **`npm test` had never worked** — it hands both files to one `node --test`, which runs them in
+  parallel, and both bind port 7399. It is sequential now, matching CI.
+- **The bar could land in the wrong place** on pages whose `<html>` carries a transform.
+  `keepDockOnScreen()` sets `transform: none` and measures on the next line, but the bar also
+  transitioned `transform` over 140ms — so the rect was read mid-animation and the correction was
+  computed from the wrong position. It self-corrected on the next pass, which is why it only
+  showed up intermittently. The transform is only ever a position fix, never an effect, so the
+  transition is gone.
+
+### Changed
+- **The on-page bar is no longer dimmed.** Fading it (`.58` at rest, `.4` minified) put the label
+  at 4.4:1, the shortcut keycap at 2.34:1 and the minified bar at 2.55:1 against a white page —
+  below the 4.5:1 AA floor. Discretion now comes from size and position.
+- **Pins, note numbers and the picked-element chip are no longer error red.** White on `#e5484d`
+  measured 3.91:1 at 11px bold, and a pending note is not a fault. Red now means only *error* or
+  *delete*.
+- **Stop is clickable while picking.** The bar stays inert so it can never block the element you
+  are aiming at, but clicking Stop no longer falls through and annotates the page behind it.
+- The popup honours `prefers-color-scheme`; it was a white flash in a dark browser.
+
+### Added
+- `prefers-reduced-motion` support — seven animations ran unconditionally, two of them forever.
+- README: prerequisites, corrected step order (the bridge blocks the terminal — you need a second
+  one), the `file://` permission step, `setup.sh`, and a Troubleshooting section.
+- Three tests, taking the suite from 79 to 82: a flag before a subcommand, hooks surviving a path
+  with a space (and leaving unrelated hooks alone), and Stop ending a pick with a real mouse click
+  while the rest of the bar stays inert.
+
 ## [0.4.0] — 2026-09-08
 
 First public release.
@@ -29,7 +77,7 @@ First public release.
   carries a fingerprint so a pin can tell whether its element is still the one you clicked.
 - **Offline fallback** — with the bridge down, **Send** copies a ready-to-paste prompt
   to the clipboard.
-- 81 tests: bridge/CLI/hooks/MCP on a scratch daemon, and a Chromium suite that loads the
+- 79 tests: bridge/CLI/hooks/MCP on a scratch daemon, and a Chromium suite that loads the
   unpacked extension and drives React, Vue, shadow DOM, an iframe, a strict-CSP page, a
   3,600-node stress page and a form that rebuilds its own DOM.
 
