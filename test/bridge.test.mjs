@@ -517,6 +517,19 @@ test("hooks: a path with a space stays quoted, and unrelated hooks survive", asy
   const spacey = "/Users/me/My Projects/pinpoint/bridge/cli.js";
   assert.ok(hookCommand(spacey, {}).includes(`"${spacey}"`), "install path must stay quoted");
 
+  // The command is written into settings.json, so what matters is the string Claude Code parses
+  // back out. JSON-escaping the path (rather than plain-quoting it) survived this round trip as
+  // C:\\Users\\... — doubled separators, on the platform least able to shrug them off.
+  for (const cliPath of [
+    "C:\\Users\\dev\\pinpoint\\bridge\\cli.js",
+    "C:\\Users\\My Projects\\pinpoint\\bridge\\cli.js",
+    "/home/dev/pinpoint/bridge/cli.js",
+  ]) {
+    const command = hookCommand(cliPath, {});
+    const afterRoundTrip = JSON.parse(JSON.stringify({ command })).command;
+    assert.equal(afterRoundTrip, `node "${cliPath}" print --hook`, `path mangled for ${cliPath}`);
+  }
+
   // Ownership used to be a substring test for "pinpoint", so a user's own hook that merely
   // mentioned pinpoint — or a repo living in a pinpoint/ folder — was silently deleted.
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "pp-hooks-"));

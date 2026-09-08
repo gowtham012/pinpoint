@@ -22,6 +22,10 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
 - The origin guard admitted `http://localhost` — the dev site being annotated. `SECURITY.md` and
   the README both said otherwise; the code now matches.
 - `setup.sh` defaulted the project to a personal path (`~/Desktop/markus`) in a public repo.
+- **Windows: the installed hook carried a mangled path.** The path was JSON-escaped rather than
+  quoted, so `C:\Users\dev\...` reached the shell as `C:\\Users\\dev\\...`. Windows often
+  tolerates doubled separators, but when it does not the only symptom is "Cannot find module" on
+  every prompt.
 - **The browser suite could not run on a fresh clone.** Playwright ≥1.49 launches
   `chrome-headless-shell` for `headless: true`, which cannot load extensions.
 - **`npm test` had never worked** — it hands both files to one `node --test`, which runs them in
