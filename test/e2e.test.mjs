@@ -16,6 +16,8 @@ const EXT = path.resolve(here, "../extension");
 const CLI = path.resolve(here, "../bridge/cli.js");
 // Use whatever Chromium Playwright installed, unless a specific binary is pointed at.
 const CHROME = process.env.PINPOINT_CHROME || undefined;
+// Shares 7399 with bridge.test.mjs, which is safe because `npm test` runs the files sequentially
+// (--test-concurrency=1). 7397 and 7398 are taken by fixtures in here that must NOT answer.
 const PORT = 7399, SITE = 8081;
 const BASE = `http://127.0.0.1:${PORT}`;
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "pp-e2e-"));
@@ -48,7 +50,10 @@ async function stopDaemon() { if (!daemon) return; daemon.kill(); await new Prom
 
 async function launch(extra = {}) {
   const c = await chromium.launchPersistentContext("", {
-    ...(CHROME ? { executablePath: CHROME } : {}), headless: true,
+    // `channel: "chromium"` forces the full browser. Without it Playwright >=1.49 launches
+    // chrome-headless-shell for headless:true, and the headless shell cannot load extensions —
+    // every test then dies waiting for a service worker that never starts.
+    ...(CHROME ? { executablePath: CHROME } : { channel: "chromium" }), headless: true,
     args: ["--headless=new", `--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`,
            "--host-resolver-rules=MAP notlocal.example 127.0.0.1"],
     viewport: { width: 1280, height: 800 }, permissions: ["clipboard-read", "clipboard-write"], ...extra,
@@ -977,12 +982,24 @@ test("the extension does not load itself on a non-local site", async () => {
 test("the popup explains an unusable page instead of throwing (the chrome:// crash)", async () => {
   const sw = ctx.serviceWorkers()[0];
   // a browser page: extensions simply cannot run there
-  const blocked = await sw.evaluate(() => ({ reason: whyNot("chrome://extensions"), local: isLocalDev("chrome://extensions") }));
+  const blocked = await sw.evaluate(async () => ({ reason: await whyNot("chrome://extensions"), local: isLocalDev("chrome://extensions") }));
   assert.equal(blocked.local, false);
   assert.match(blocked.reason, /browser pages/);
   // and an ordinary website gets the "this is a local dev tool" explanation
   const site = await sw.evaluate(() => whyNot("https://example.com/"));
   assert.match(site, /local development pages/);
+
+  // file:// is matched by the manifest, but Chrome keeps per-extension file access off by default.
+  // Whichever way this browser is configured, the message must describe the state it is actually in.
+  const fileCase = await sw.evaluate(async () => ({
+    allowed: await chrome.extension.isAllowedFileSchemeAccess(),
+    reason: await whyNot("file:///tmp/whatever.html"),
+  }));
+  assert.match(
+    fileCase.reason,
+    fileCase.allowed ? /local development pages/ : /Allow access to file URLs/,
+    `file:// message must match the actual permission (allowed=${fileCase.allowed})`
+  );
 
   // the popup renders that message and keeps the button usable for opt-in
   const page = await ctx.newPage();
