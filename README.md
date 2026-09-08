@@ -10,6 +10,8 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
 ```
 
+![Pinpoint on a local dev page: the bar in the corner, and a numbered pin on the field being changed](docs/images/hero.png)
+
 ## Quick start
 
 You need **Node 18+** and a Chromium browser (Chrome, Arc, Brave or Edge). The `claude` CLI is
@@ -65,9 +67,20 @@ Anywhere else — a staging URL, or a private LAN address like `192.168.1.5:3000
 
 While the bridge is running, a small bar sits in the corner of every page — that is how you know Pinpoint is live in this tab. Click it (or press **⌥⇧A** / **Alt+Shift+A**) to start marking.
 
-Comment mode stays on. Click an element, type what should change, press **⌘↩** / **Ctrl+Enter**, and you are immediately ready for the next one — no shortcut in between. **Esc** when you are done. While you are marking, the bar goes inert so it can never sit between you and the element you want.
+Comment mode stays on. Click an element, type what should change, press **⌘↩** / **Ctrl+Enter**, and you are immediately ready for the next one — no shortcut in between. **Esc** when you are done, or click **Stop** on the bar. While you are marking the bar is click-through, so it can never sit between you and the element you want — Stop is the one part of it that still takes a click.
 
 Hovering outlines each element and names its React/Vue component, with a comment cursor so the mode is obvious.
+
+| | |
+|---|---|
+| ![The bar, idle](docs/images/bar-idle.png) | ![The bar while picking, with a Stop control](docs/images/bar-armed.png) |
+| Idle — it tells you the shortcut. | Picking. The bar is click-through so it can never block the element you are aiming at; **Stop** is the exception. |
+
+![The comment popover on a form field, showing the element it picked](docs/images/popover.png)
+
+The popover names exactly what you picked, so you can tell two near-identical buttons apart before you type.
+
+![A numbered pin on the annotated field](docs/images/pin.png)
 
 The bar also shows who is present: you, and your coding agent. When the agent reads your notes, opens one, or finishes one, its avatar lights up and the bar says what it is doing — the note it is looking at gets a ring, and a note it completes disappears in front of you. The bar's counter opens a list of everything marked on the page; click a row to jump to it. The **×** hides the bar for that site (the toolbar popup brings it back, and can move it to any corner).
 

@@ -46,9 +46,14 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
   *delete*.
 - **Stop is clickable while picking.** The bar stays inert so it can never block the element you
   are aiming at, but clicking Stop no longer falls through and annotates the page behind it.
+  (Its first cut was white-on-white — 1.00:1, invisible — because the mockup had a violet bar while
+  only the toggle pill actually turns violet. The test now measures the control's contrast, not
+  just that it responds.)
 - The popup honours `prefers-color-scheme`; it was a white flash in a dark browser.
 
 ### Added
+- README screenshots — the bar idle and picking, the popover, a pin, and a hero shot. Generated
+  from the shipped extension by a script that runs its own bridge on a scratch port.
 - `prefers-reduced-motion` support — seven animations ran unconditionally, two of them forever.
 - README: prerequisites, corrected step order (the bridge blocks the terminal — you need a second
   one), the `file://` permission step, `setup.sh`, and a Troubleshooting section.

@@ -811,6 +811,34 @@ test("Stop ends picking with a real click, while the rest of the bar stays inert
   assert.equal(pe.bar, "none", "the armed bar stays inert");
   assert.equal(pe.stop, "auto", "but Stop is clickable");
 
+  // Clickable is not the same as visible. A first cut of this control was white-on-white — it
+  // rendered, it was 85x26, it passed every behavioural assertion, and no one could see it.
+  const legible = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    const el = r.querySelector(".dock .stop");
+    const box = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    // Walk up for the first non-transparent background, the way a viewer's eye does.
+    const bgOf = (node) => {
+      for (let n = node; n; n = n.parentElement || n.getRootNode()?.host) {
+        const c = getComputedStyle(n).backgroundColor;
+        const m = c.match(/[\d.]+/g);
+        if (m && (m.length < 4 || Number(m[3]) > 0.5)) return m.slice(0, 3).map(Number);
+      }
+      return [255, 255, 255];
+    };
+    const lum = ([r_, g, b]) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(r_) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const fg = cs.color.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const bg = bgOf(el);
+    const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a);
+    return { w: Math.round(box.width), h: Math.round(box.height), ratio: (hi + 0.05) / (lo + 0.05) };
+  });
+  assert.ok(legible.w > 20 && legible.h > 14, `Stop must have real size, got ${legible.w}x${legible.h}`);
+  assert.ok(legible.ratio >= 4.5, `Stop must be readable, got ${legible.ratio.toFixed(2)}:1`);
+
   // A real mouse click at Stop's own coordinates. A scripted .click() would bypass pointer-events
   // and prove nothing; this is the exact gesture that used to fall through and annotate the page.
   const box = await page.evaluate(() => {
