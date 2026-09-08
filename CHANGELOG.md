@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Fixed
+- **A region anchored to the whole page instead of the thing you drew around.** The rule was "the
+  deepest element that fully *contains* the box", but nobody drags pixel-perfect — a 741×286 box
+  drawn generously around a 642×165 card is not contained by that card, so the search walked past
+  it to `<main>`. It now asks what the box *enclosed*: the elements it substantially covers, keeping
+  the outermost, and their common ancestor when several were spanned.
 - **`file://` pages were promised but dead.** Chrome keeps *Allow access to file URLs* off per
   extension, so the content script never injected — while `isLocalDev()` returned true for `file:`,
   so the popup offered to annotate and then reported a message asserting `file://` pages work.

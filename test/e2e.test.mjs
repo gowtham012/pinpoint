@@ -121,6 +121,12 @@ test("Esc cancels picking; highlight hidden; Esc/Cancel close popover without se
   // This test clicks the page's own nav, which lives top-right — exactly where the bar now sits by
   // default, so the bar really does intercept it. Park the bar in the far corner: what is under
   // test here is Esc/Cancel, not placement.
+  // Wait for the corner class to actually be applied first — it arrives after an async
+  // chrome.storage read, so flipping it earlier is simply undone a moment later.
+  await page.waitForFunction(
+    () => document.querySelector("pinpoint-root")?.shadowRoot?.querySelector(".dock")?.classList.contains("pos-tr"),
+    null, { timeout: 8000 }
+  );
   await page.evaluate(() => {
     const d = document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock");
     d.classList.remove("pos-tr"); d.classList.add("pos-bl");
@@ -798,6 +804,42 @@ test("the dock says Pinpoint is live in this tab, and doubles as the on/off swit
   await page.keyboard.press("Escape");
   assert.equal((await S(page)).picking, false, "Esc turns it off");
   assert.equal((await dock(page)).armed, false);
+  await page.close();
+});
+
+test("a box drawn loosely around a card anchors to the card, not the page", async () => {
+  // Reported from real use: a 741x286 box drawn generously around a 642x165 card anchored on
+  // <main>, because the old rule wanted an element that fully CONTAINED the rectangle. Nobody
+  // drags pixel-perfect — the anchor has to be what the box enclosed.
+  await clearAll();
+  const page = await openPage("/");
+  await arm(page);
+
+  const card = await page.locator(".card").first().boundingBox();
+  // deliberately overshoot the card on every side
+  const from = { x: card.x - 24, y: card.y - 24 };
+  const to = { x: card.x + card.width + 24, y: card.y + card.height + 24 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 30, from.y + 30, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+
+  // Compare geometry, not names: the grid container is called ".cards" and would sail past a
+  // /card/i check while being the very bug under test.
+  const hl = await page.evaluate(() => {
+    const el = document.querySelector("pinpoint-root").shadowRoot.querySelector(".hl");
+    const b = el.getBoundingClientRect();
+    return { x: b.x, y: b.y, w: b.width, h: b.height,
+             label: el.querySelector(".tag").textContent };
+  });
+  const grid = await page.locator(".cards").boundingBox();
+  assert.ok(
+    Math.abs(hl.w - card.width) <= 12,
+    `the highlight should hug the card (${Math.round(card.width)}px), not its ${Math.round(grid.width)}px grid — got ${Math.round(hl.w)}px, labelled "${hl.label}"`
+  );
+  assert.ok(hl.w < grid.width - 40, `must not anchor on the whole grid or page, labelled "${hl.label}"`);
+  await page.keyboard.press("Escape");
   await page.close();
 });
 
