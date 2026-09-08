@@ -177,7 +177,9 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     const hostHeader = (req.headers.host || "").replace(/^\[|\]$/g, "").split(":")[0];
     if (!["127.0.0.1", "localhost", "::1"].includes(hostHeader)) return json(res, 403, { error: "loopback only" });
     const origin = req.headers.origin;
-    if (origin && !/^(chrome|moz|safari-web)-extension:\/\//.test(origin) && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+    // Only the extension (a *-extension:// origin) and origin-less local CLI tools. A localhost
+    // origin is a web page too — the very dev site being annotated — so it is refused like any other.
+    if (origin && !/^(chrome|moz|safari-web)-extension:\/\//.test(origin)) {
       return json(res, 403, { error: "origin not allowed" });
     }
 

@@ -2,10 +2,11 @@
 # One-shot setup: installs deps, registers Pinpoint with Claude Code (MCP + automatic hooks),
 # opens chrome://extensions, and starts the bridge.
 #
-#   bash ~/Downloads/pinpoint/setup.sh [/path/to/project]      default: ~/Desktop/markus
+#   bash setup.sh /path/to/your/project
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT="${1:-$HOME/Desktop/markus}"
+PROJECT="${1:-}"
+[ -n "$PROJECT" ] || { echo "Usage: bash setup.sh /path/to/your/project"; echo "  (the repo whose UI you want to annotate)"; exit 1; }
 
 [ -d "$PROJECT" ] || { echo "Project folder not found: $PROJECT"; echo "Pass it as the first argument."; exit 1; }
 command -v node >/dev/null || { echo "node not found — install Node 18+ first"; exit 1; }

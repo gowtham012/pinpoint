@@ -25,10 +25,15 @@ function isLocalDev(url) {
     h.endsWith(".local") || h.endsWith(".test") || h.endsWith(".localhost");
 }
 
-function whyNot(url) {
+async function whyNot(url) {
   if (!url) return "Open a page first.";
   if (/^(chrome|edge|about|devtools|view-source|chrome-extension|moz-extension):/.test(url)) {
     return "Chrome doesn't let extensions run on browser pages like this one.";
+  }
+  // Chrome keeps file:// access off per-extension, and off is the default. Without it we are never
+  // injected into a file:// page at all — so name the switch instead of claiming the page is fine.
+  if (url.startsWith("file:") && !(await chrome.extension.isAllowedFileSchemeAccess())) {
+    return 'Turn on "Allow access to file URLs" for Pinpoint on chrome://extensions, then reload this page.';
   }
   return "Pinpoint runs on local development pages — localhost, 127.0.0.1, a .local/.test host, or a file:// page.";
 }
@@ -284,7 +289,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case "canRun": {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        return { url: tab?.url || null, local: isLocalDev(tab?.url), reason: whyNot(tab?.url) };
+        return { url: tab?.url || null, local: isLocalDev(tab?.url), reason: await whyNot(tab?.url) };
       }
       default:
         return { error: `unknown message ${msg.type}` };
@@ -312,7 +317,7 @@ async function togglePicker(tab, force) {
     await chrome.tabs.sendMessage(tab.id, msg);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: whyNot(tab.url) };
+    return { ok: false, error: await whyNot(tab.url) };
   }
 }
 

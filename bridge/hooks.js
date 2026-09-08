@@ -9,11 +9,15 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const MARK = "pinpoint";
+// Identifies our own entries. It must match the command we write and nothing else — "pinpoint"
+// alone also matches a user's unrelated hook, or any repo that simply lives in a pinpoint/ folder.
+const MARK = "print --hook";
 
 export function hookCommand(cliPath, { port } = {}) {
   const p = port && port !== 7331 ? ` --port ${port}` : "";
-  return `node ${JSON.stringify(cliPath).slice(1, -1)} print --hook${p}`;
+  // Keep the quotes JSON.stringify adds: an install path containing a space is otherwise split
+  // by the shell and every prompt fails with "Cannot find module".
+  return `node ${JSON.stringify(cliPath)} print --hook${p}`;
 }
 
 function readJson(file) {
