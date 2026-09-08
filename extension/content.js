@@ -103,9 +103,13 @@
       .dock.armed .stop {
         display: inline-flex; align-items: center; pointer-events: auto;
         border-radius: 999px; padding: 5px 10px; line-height: 1; font-weight: 600;
-        background: color-mix(in srgb, var(--accent-ink) 20%, transparent); color: var(--accent-ink);
+        /* Ink on surface, NOT accent-ink: only the toggle pill turns violet when armed — the bar
+           itself stays var(--surface). White-on-white measured 1.00:1, i.e. invisible. This pair
+           inverts with the theme (17.9:1 light, 15.2:1 dark) and stays distinct from the violet
+           state pill next to it. */
+        background: var(--ink); color: var(--surface);
       }
-      .dock.armed .stop:hover { background: color-mix(in srgb, var(--accent-ink) 32%, transparent); }
+      .dock.armed .stop:hover { background: color-mix(in srgb, var(--ink) 82%, var(--surface)); }
       .dock.armed .label { display: none; }
       .dock.armed .sep, .dock.armed .close { display: none; }
       .dock.mini .count { padding: 5px 8px; }
