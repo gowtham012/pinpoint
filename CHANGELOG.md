@@ -29,7 +29,7 @@ First public release.
   carries a fingerprint so a pin can tell whether its element is still the one you clicked.
 - **Offline fallback** — with the bridge down, **Send** copies a ready-to-paste prompt
   to the clipboard.
-- 79 tests: bridge/CLI/hooks/MCP on a scratch daemon, and a Chromium suite that loads the
+- 81 tests: bridge/CLI/hooks/MCP on a scratch daemon, and a Chromium suite that loads the
   unpacked extension and drives React, Vue, shadow DOM, an iframe, a strict-CSP page, a
   3,600-node stress page and a form that rebuilds its own DOM.
 
