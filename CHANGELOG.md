@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Fixed
-- **A region anchored to the whole page instead of the thing you drew around.** The rule was "the
-  deepest element that fully *contains* the box", but nobody drags pixel-perfect — a 741×286 box
-  drawn generously around a 642×165 card is not contained by that card, so the search walked past
-  it to `<main>`. It now asks what the box *enclosed*: the elements it substantially covers, keeping
-  the outermost, and their common ancestor when several were spanned.
+- **A region anchored to the whole page instead of the thing you drew around.** Nobody drags
+  pixel-perfect: a box drawn generously around a card is contained by no card, so a rule asking for
+  the element that *contains* the box reached `<main>`. Asking instead for the outermost mostly-
+  covered element fails the same way, because a short page container is itself mostly covered and,
+  being outermost, swallows the card inside it. The rule now is **the smallest element that
+  accounts for at least half the box**: share is measured against the box, so a candidate must
+  already be about the size of what was drawn, and the smallest such element is the most specific
+  one. Span three cards and no single card reaches half, so their grid wins instead.
 - **`file://` pages were promised but dead.** Chrome keeps *Allow access to file URLs* off per
   extension, so the content script never injected — while `isLocalDev()` returned true for `file:`,
   so the popup offered to annotate and then reported a message asserting `file://` pages work.

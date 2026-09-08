@@ -853,47 +853,37 @@
 
   // What did the box ENCLOSE? — not what encloses the box.
   //
-  // The first version asked for the deepest element that fully contained the rectangle, which is
-  // wrong for how people actually drag: you draw loosely *around* the thing you mean, usually a
-  // little bigger than it. A box drawn generously around a 642x165 card is not contained by that
-  // card, so the search walked past it and anchored on <main> — the whole page.
+  // Two earlier rules were wrong, both reproduced in test/site/region.html:
+  //   1. "the deepest element that fully CONTAINS the box" — nobody drags pixel-perfect, so a box
+  //      drawn generously around a card is contained by no card and the search reached <main>.
+  //   2. "the outermost element that is ≥60% covered" — a short page container is itself mostly
+  //      covered, and being outermost it swallowed the card inside it.
   //
-  // Instead: find the elements the box substantially covers, keep the outermost of them, and take
-  // those. One outermost hit is the answer; several means you spanned siblings, so their common
-  // ancestor is.
+  // The rule that holds: the SMALLEST element that accounts for at least half the box. Share is
+  // measured against the box, so a candidate must already be about the size of what was drawn —
+  // which rules out incidental slivers — and taking the smallest such element keeps the most
+  // specific one. Span three cards and no single card reaches half, so their grid wins instead.
   function anchorFor(box) {
     const bx2 = box.left + box.width, by2 = box.top + box.height;
-    const coverage = (r) => {
+    const boxArea = box.width * box.height || 1;
+    const shareOfBox = (r) => {
       const w = Math.min(r.right, bx2) - Math.max(r.left, box.left);
       const h = Math.min(r.bottom, by2) - Math.max(r.top, box.top);
-      if (w <= 0 || h <= 0) return 0;
-      const area = r.width * r.height;
-      return area ? (w * h) / area : 0;
+      return w > 0 && h > 0 ? (w * h) / boxArea : 0;
     };
 
-    const hits = [];
+    let best = null, bestArea = Infinity;
+    let fallback = null, fallbackShare = 0;
     for (const el of document.body.querySelectorAll("*")) {
       if (isOurs(el)) continue;
       const r = el.getBoundingClientRect();
-      if (r.width * r.height < 100) continue;          // ignore hairlines and empty wrappers
-      if (coverage(r) >= 0.6) hits.push(el);
+      const area = r.width * r.height;
+      if (area < 100) continue;                       // hairlines and empty wrappers
+      const share = shareOfBox(r);
+      if (share > fallbackShare) { fallbackShare = share; fallback = el; }
+      if (share >= 0.5 && area < bestArea) { best = el; bestArea = area; }
     }
-    // Keep only the outermost: a card and all of its fields collapse to the card.
-    const outer = hits.filter((el) => !hits.some((o) => o !== el && o.contains(el)));
-
-    if (outer.length === 1) return outer[0];
-    if (outer.length > 1) {
-      let lca = outer[0];
-      for (const el of outer.slice(1)) {
-        while (lca && !lca.contains(el)) lca = lca.parentElement;
-        if (!lca) return document.body;
-      }
-      return lca && lca !== document.documentElement ? lca : document.body;
-    }
-
-    // Nothing substantially inside — fall back to the smallest thing under the box's middle.
-    const el = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    return el && !isOurs(el) && el !== document.documentElement ? el : document.body;
+    return best || fallback || document.body;
   }
 
   // The outermost elements wholly inside the box — what the region actually contains, without

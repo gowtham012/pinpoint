@@ -29,7 +29,7 @@ const site = http.createServer((req, res) => {
   const files = {
     "/": "site/index.html", "/react.development.js": "node_modules/react/umd/react.development.js", "/react-dom.development.js": "node_modules/react-dom/umd/react-dom.development.js",
     "/vue.html": "site/vue.html", "/vue.global.js": "node_modules/vue/dist/vue.global.js",
-    "/plain.html": "site/plain.html", "/rerender.html": "site/rerender.html", "/frame.html": "site/frame.html", "/csp.html": "site/csp.html", "/stress.html": "site/stress.html",
+    "/plain.html": "site/plain.html", "/region.html": "site/region.html", "/rerender.html": "site/rerender.html", "/frame.html": "site/frame.html", "/csp.html": "site/csp.html", "/stress.html": "site/stress.html",
   };
   const f = files[p];
   if (!f) { res.writeHead(404); return res.end(); }
@@ -808,37 +808,43 @@ test("the dock says Pinpoint is live in this tab, and doubles as the on/off swit
 });
 
 test("a box drawn loosely around a card anchors to the card, not the page", async () => {
-  // Reported from real use: a 741x286 box drawn generously around a 642x165 card anchored on
-  // <main>, because the old rule wanted an element that fully CONTAINED the rectangle. Nobody
-  // drags pixel-perfect — the anchor has to be what the box enclosed.
+  // Reported from real use, with a screenshot: a 741×286 box drawn generously around a card
+  // anchored on <main>. Two separate reasons, both reproduced by this fixture:
+  //   1. the first rule wanted an element that fully CONTAINED the box — no card contains a box
+  //      bigger than itself, so the search walked to the page root;
+  //   2. the second rule kept anything ≥60% covered, so overshooting caught the small step labels
+  //      above and the next card's header below — each ~0% of the box, yet enough to drag the
+  //      common ancestor back up to <main>.
   await clearAll();
-  const page = await openPage("/");
+  const page = await openPage("/region.html");
   await arm(page);
 
-  const card = await page.locator(".card").first().boundingBox();
-  // deliberately overshoot the card on every side
-  const from = { x: card.x - 24, y: card.y - 24 };
-  const to = { x: card.x + card.width + 24, y: card.y + card.height + 24 };
+  const card = await page.locator("#first").boundingBox();
+  // overshoot on every side, far enough to swallow the labels above and the next header below
+  const from = { x: card.x - 30, y: card.y - 34 };
+  const to = { x: card.x + card.width + 30, y: card.y + card.height + 56 };
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
-  await page.mouse.move(from.x + 30, from.y + 30, { steps: 4 });
-  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.move(from.x + 40, from.y + 40, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 10 });
   await page.mouse.up();
 
-  // Compare geometry, not names: the grid container is called ".cards" and would sail past a
-  // /card/i check while being the very bug under test.
+  // Geometry, not names: the label would read "main" or "div.section-card" and a loose regex
+  // would accept either. The highlight has to hug the card.
   const hl = await page.evaluate(() => {
     const el = document.querySelector("pinpoint-root").shadowRoot.querySelector(".hl");
     const b = el.getBoundingClientRect();
-    return { x: b.x, y: b.y, w: b.width, h: b.height,
-             label: el.querySelector(".tag").textContent };
+    return { w: b.width, h: b.height, label: el.querySelector(".tag").textContent };
   });
-  const grid = await page.locator(".cards").boundingBox();
   assert.ok(
-    Math.abs(hl.w - card.width) <= 12,
-    `the highlight should hug the card (${Math.round(card.width)}px), not its ${Math.round(grid.width)}px grid — got ${Math.round(hl.w)}px, labelled "${hl.label}"`
+    Math.abs(hl.w - card.width) <= 8 && Math.abs(hl.h - card.height) <= 8,
+    `expected the card (${Math.round(card.width)}×${Math.round(card.height)}), got ` +
+      `${Math.round(hl.w)}×${Math.round(hl.h)} labelled "${hl.label}"`
   );
-  assert.ok(hl.w < grid.width - 40, `must not anchor on the whole grid or page, labelled "${hl.label}"`);
+
+  // and the sibling it overshot into must not have been swept in
+  const second = await page.locator("#second").boundingBox();
+  assert.ok(hl.h < second.y - card.y, `must not span into the next card, labelled "${hl.label}"`);
   await page.keyboard.press("Escape");
   await page.close();
 });
