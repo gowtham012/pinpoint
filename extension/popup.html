@@ -3,35 +3,56 @@
 <head>
 <meta charset="utf-8" />
 <style>
-  body { width: 320px; margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; }
-  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #eee; }
+  /* Tokens, so dark mode is a redefinition rather than a second stylesheet. The on-page UI has
+     honoured prefers-color-scheme since day one; this popup never did — a white flash in a dark
+     browser. Values match content.js so the two surfaces read as one product. */
+  :root {
+    --ink: #17171c; --ink-dim: #6b6b76; --ink-faint: #71717a;
+    --surface: #ffffff; --surface-2: #f1f1f3; --surface-3: #e4e4e8;
+    --line: #eeeeee; --line-2: #f2f2f2; --field: #dddddd;
+    --accent: #6e56cf; --accent-ink: #ffffff; --accent-hover: #5b46b3;
+    --ok: #2a9d5c; --bad: #e5484d;
+    --note-ink: #8a6d1f; --note-bg: #fdf6e3; --note-line: #f0e2b6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #f2f2f5; --ink-dim: #a1a1ab; --ink-faint: #86868f;
+      --surface: #1c1c20; --surface-2: #2a2a30; --surface-3: #34343c;
+      --line: #2e2e35; --line-2: #26262c; --field: #3a3a42;
+      --accent: #8b74f0; --accent-ink: #14121f; --accent-hover: #9d89f4;
+      --ok: #3ec37a; --bad: #ff6369;
+      --note-ink: #e8cf8a; --note-bg: #2b2718; --note-line: #4a4126;
+    }
+  }
+  body { width: 320px; margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--surface); }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 14px; margin: 0; flex: 1; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
-  .dot.on { background: #2a9d5c; } .dot.off { background: #e5484d; }
-  .status { font-size: 11px; color: #777; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--bad); }
+  .status { font-size: 11px; color: var(--ink-dim); }
   main { padding: 12px 14px; display: grid; gap: 8px; }
-  button { border: 0; border-radius: 8px; padding: 9px 12px; font: 600 13px inherit; cursor: pointer; background: #f1f1f3; color: #222; text-align: left; display: flex; align-items: center; gap: 8px; }
-  button:hover { background: #e4e4e8; }
+  button { border: 0; border-radius: 8px; padding: 9px 12px; font: 600 13px inherit; cursor: pointer; background: var(--surface-2); color: var(--ink); text-align: left; display: flex; align-items: center; gap: 8px; }
+  button:hover { background: var(--surface-3); }
   button:disabled { opacity: .45; cursor: default; }
-  button:disabled:hover { background: #f1f1f3; }
-  button.primary { background: #6e56cf; color: #fff; } button.primary:hover { background: #5b46b3; }
+  button:disabled:hover { background: var(--surface-2); }
+  button.primary { background: var(--accent); color: var(--accent-ink); } button.primary:hover { background: var(--accent-hover); }
   button kbd { margin-left: auto; font: 11px ui-monospace, Menlo, monospace; opacity: .7; }
-  ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; border-top: 1px solid #eee; }
-  li { padding: 8px 14px; border-bottom: 1px solid #f2f2f2; display: flex; gap: 8px; align-items: flex-start; }
-  li .n { background: #e5484d; color: #fff; border-radius: 999px; min-width: 20px; height: 20px; font: 700 11px/20px inherit; text-align: center; padding: 0 5px; flex-shrink: 0; }
+  ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; border-top: 1px solid var(--line); }
+  li { padding: 8px 14px; border-bottom: 1px solid var(--line-2); display: flex; gap: 8px; align-items: flex-start; }
+  li .n { background: var(--accent); color: var(--accent-ink); border-radius: 999px; min-width: 20px; height: 20px; font: 700 11px/20px inherit; text-align: center; padding: 0 5px; flex-shrink: 0; }
   li .c { flex: 1; min-width: 0; }
   li .c .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  li .c .s { font: 10px ui-monospace, Menlo, monospace; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  li .c .u { font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  li .c .u.current { color: #6e56cf; }
-  li .x { color: #aaa; cursor: pointer; padding: 0 2px; } li .x:hover { color: #e5484d; }
-  .empty { padding: 14px; color: #888; text-align: center; font-size: 12px; }
-  footer { padding: 8px 14px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: center; font-size: 11px; color: #777; }
-  footer input { width: 52px; border: 1px solid #ddd; border-radius: 6px; padding: 3px 6px; font: inherit; }
-  footer select { border: 1px solid #ddd; border-radius: 6px; padding: 3px 4px; font: inherit; background: #fff; }
-  footer a { color: #6e56cf; margin-left: auto; text-decoration: none; }
-  .hint { font-size: 11px; color: #888; line-height: 1.4; }
-  .where { display: none; font-size: 11.5px; line-height: 1.45; color: #8a6d1f; background: #fdf6e3; border: 1px solid #f0e2b6; border-radius: 8px; padding: 8px 10px; }
+  li .c .s { font: 10px ui-monospace, Menlo, monospace; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .c .u { font-size: 10px; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .c .u.current { color: var(--accent); }
+  li .x { color: var(--ink-faint); cursor: pointer; padding: 0 2px; } li .x:hover { color: var(--bad); }
+  .empty { padding: 14px; color: var(--ink-dim); text-align: center; font-size: 12px; }
+  footer { padding: 8px 14px; border-top: 1px solid var(--line); display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--ink-dim); }
+  footer input { width: 52px; border: 1px solid var(--field); border-radius: 6px; padding: 3px 6px; font: inherit; background: var(--surface); color: var(--ink); }
+  footer select { border: 1px solid var(--field); border-radius: 6px; padding: 3px 4px; font: inherit; background: var(--surface); color: var(--ink); }
+  footer a { color: var(--accent); margin-left: auto; text-decoration: none; }
+  .hint { font-size: 11px; color: var(--ink-dim); line-height: 1.4; }
+  .where { display: none; font-size: 11.5px; line-height: 1.45; color: var(--note-ink); background: var(--note-bg); border: 1px solid var(--note-line); border-radius: 8px; padding: 8px 10px; }
   button kbd { margin-left: auto; }
 </style>
 </head>

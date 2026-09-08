@@ -63,8 +63,10 @@
         box-shadow: 0 2px 8px rgba(0,0,0,.2);
       }
       .hl .tag b { font-weight: 700; }
-      .hl.selected { outline-color: #e5484d; background: rgba(229,72,77,.08); }
-      .hl.selected .tag { background: #e5484d; }
+      /* The element you picked reads as "held", not "wrong" — neutral ink, distinct from the
+         accent used while merely hovering. */
+      .hl.selected { outline-color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+      .hl.selected .tag { background: var(--ink); color: var(--surface-2); }
       .hl.flash { animation: flash 1s ease-out; }
       @keyframes flash { 0%,100% { background: transparent } 30% { background: color-mix(in srgb, var(--accent) 22%, transparent) } }
 
@@ -76,20 +78,34 @@
         border: 1px solid var(--line); border-radius: 999px;
         box-shadow: var(--shadow); padding: 3px;
         backdrop-filter: saturate(180%) blur(12px);
-        opacity: .58; transition: opacity 140ms ease, transform 140ms cubic-bezier(.2,.8,.2,1);
+        /* Deliberately NOT dimmed. Fading the whole bar (was .58 at rest, .4 minified) took the
+           label to 4.4:1, the shortcut keycap to 2.34:1 and the minified bar to 2.55:1 against a
+           white page — under the 4.5:1 AA floor. Discretion comes from size and position now. */
+        /* No transition on transform. keepDockOnScreen() sets transform:none and measures on the
+           very next line; with a transition that rect is read mid-animation, so the correction is
+           computed from the wrong position. The transform is only ever a position fix, never an
+           effect, so there is nothing here worth animating. */
         font-size: 12px; user-select: none;
       }
-      .dock:hover { opacity: 1; }
       .dock.pos-br { left: auto; right: 16px; }
       .dock.pos-tl { bottom: auto; top: 16px; }
       .dock.pos-tr { bottom: auto; top: 16px; left: auto; right: 16px; }
       .dock.mini .label, .dock.mini .hint, .dock.mini .sep, .dock.mini .close { display: none; }
-      .dock.mini { padding: 3px; opacity: .4; }
-      .dock.mini:hover { opacity: 1; }
+      .dock.mini { padding: 3px; }
       .dock.mini .toggle { padding: 5px 7px; }
       /* While picking, every click belongs to the page: the bar goes inert so it can never sit
          between you and the element you want, wherever it is. Esc (or the shortcut) stops. */
       .dock.armed { pointer-events: none; }
+      /* ...except the one control whose whole job is to stop. Clicking the armed bar used to fall
+         through and annotate whatever sat beneath it, while the "Esc" hint lived inside the thing
+         you could no longer click. The bar stays inert; Stop takes its pointer events back. */
+      .dock .stop { display: none; }
+      .dock.armed .stop {
+        display: inline-flex; align-items: center; pointer-events: auto;
+        border-radius: 999px; padding: 5px 10px; line-height: 1; font-weight: 600;
+        background: color-mix(in srgb, var(--accent-ink) 20%, transparent); color: var(--accent-ink);
+      }
+      .dock.armed .stop:hover { background: color-mix(in srgb, var(--accent-ink) 32%, transparent); }
       .dock.armed .label { display: none; }
       .dock.armed .sep, .dock.armed .close { display: none; }
       .dock.mini .count { padding: 5px 8px; }
@@ -160,7 +176,9 @@
       /* ---------- pins ---------- */
       .pin {
         position: fixed; z-index: 2; min-width: 20px; height: 20px; padding: 0 6px;
-        border-radius: 999px; background: #e5484d; color: #fff;
+        /* Your marks are the accent, not error red: a pending note is not a fault, and white on
+           #e5484d measured 3.91:1 at 11px bold. Red now means only "error" or "delete". */
+        border-radius: 999px; background: var(--accent); color: var(--accent-ink);
         font: 700 11px/20px var(--sans); text-align: center;
         box-shadow: 0 2px 8px rgba(0,0,0,.28), 0 0 0 2px var(--surface);
         cursor: pointer; pointer-events: auto; transform: translate(-50%, -50%);
@@ -177,7 +195,7 @@
         border-radius: 10px; box-shadow: var(--shadow); padding: 9px 11px;
         font-size: 12.5px; line-height: 1.45; backdrop-filter: saturate(180%) blur(12px);
       }
-      .tip .num { color: #e5484d; font-weight: 700; margin-right: 5px; }
+      .tip .num { color: var(--accent); font-weight: 700; margin-right: 5px; }
       .tip .del { display: inline-block; margin-top: 7px; color: var(--ink-dim); cursor: pointer; font-size: 11px; }
       .tip .del:hover { color: #e5484d; }
 
@@ -196,7 +214,7 @@
       .panel .list { list-style: none; margin: 0; padding: 0 8px 12px; overflow: auto; flex: 1; }
       .panel .item { display: flex; gap: 9px; padding: 9px 8px; border-radius: 9px; cursor: pointer; align-items: flex-start; }
       .panel .item:hover { background: var(--surface-2); }
-      .panel .item .n { background: #e5484d; color: #fff; border-radius: 999px; min-width: 19px; height: 19px; font: 700 10px/19px var(--sans); text-align: center; padding: 0 5px; flex: none; }
+      .panel .item .n { background: var(--accent); color: var(--accent-ink); border-radius: 999px; min-width: 19px; height: 19px; font: 700 10px/19px var(--sans); text-align: center; padding: 0 5px; flex: none; }
       .panel .item .body { min-width: 0; flex: 1; }
       .panel .item .c { font-size: 12.5px; line-height: 1.4; }
       .panel .item .s { font: 10px/1.5 var(--mono); color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -211,12 +229,21 @@
         font-size: 12.5px; box-shadow: 0 8px 26px rgba(0,0,0,.32);
         display: none; pointer-events: none; animation: pop 140ms cubic-bezier(.2,.8,.2,1);
       }
+
+      /* Nothing here is load-bearing motion — it is all emphasis. Two of these loop forever (the
+         armed pulse and the agent's spinner), which is exactly what this setting exists to stop. */
+      @media (prefers-reduced-motion: reduce) {
+        .hl, .dock, .pop, .pin, .tip, .panel, .toast { transition-duration: 1ms !important; }
+        .hl.flash, .pop, .pin.new, .toast,
+        .dock.armed .mark, .dock.agent-live .av.agent svg { animation: none !important; }
+      }
     </style>
 
     <div class="hl"><div class="tag"></div></div>
 
     <div class="dock">
       <button class="toggle"><span class="mark"></span><span class="label">Pinpoint</span><span class="hint"></span></button>
+      <button class="stop" title="Stop picking">Stop&nbsp;<kbd>Esc</kbd></button>
       <span class="sep"></span>
       <span class="who" title="">
         <span class="av you" aria-label="you"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"/></svg></span>
@@ -253,6 +280,7 @@
     tag: shadow.querySelector(".hl .tag"),
     dock: shadow.querySelector(".dock"),
     dockToggle: shadow.querySelector(".dock .toggle"),
+    dockStop: shadow.querySelector(".dock .stop"),
     dockHint: shadow.querySelector(".dock .hint"),
     dockCount: shadow.querySelector(".dock .count"),
     dockCountN: shadow.querySelector(".dock .count b"),
@@ -619,7 +647,8 @@
     ui.dock.classList.toggle("armed", picking);
     if (picking) { clearTimeout(miniTimer); ui.dock.classList.remove("mini"); }
     else if (!ui.dock.classList.contains("mini")) expandDock();
-    ui.dockHint.innerHTML = picking ? `Click any element &nbsp;<kbd>Esc</kbd> to stop` : `<kbd>${MAC ? "\u2325\u21e7A" : "Alt+Shift+A"}</kbd>`;
+    // While armed the Stop button carries the Esc affordance, so the hint just names the action.
+    ui.dockHint.innerHTML = picking ? `Click any element` : `<kbd>${MAC ? "\u2325\u21e7A" : "Alt+Shift+A"}</kbd>`;
     ui.dockCountN.textContent = String(pins.length);
     ui.dockCountWord.textContent = pins.length === 1 ? "note" : "notes";
     paintAgent();
@@ -649,6 +678,7 @@
   ui.dock.addEventListener("mouseenter", () => { clearTimeout(miniTimer); ui.dock.classList.remove("mini"); });
   ui.dock.addEventListener("mouseleave", () => { if (!picking) expandDock(1200); });
   ui.dockToggle.addEventListener("click", (e) => { e.stopPropagation(); togglePicking(); });
+  ui.dockStop.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); stopPicking(); });
   ui.dockCount.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(); });
   ui.dockClose.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -697,7 +727,9 @@
   function revealPin(p) {
     const el = p.el && p.el.isConnected ? p.el : findElement(p.selector, p.fp);
     if (!el) return toast("That element isn't on the page right now");
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    // The CSS media query cannot reach this one — jumping to a note must respect the setting too.
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
     setTimeout(() => {
       moveHighlight(el, "flash");
       ui.hl.classList.add("flash");
