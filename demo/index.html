@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Northwind Freight — demo site for Pinpoint</title>
+<!--
+  A deliberately varied page for demoing and filming Pinpoint. Self-contained: no network, no
+  build, works over file:// and localhost alike.
+
+  It is intentionally NOT violet — Pinpoint's own chrome is violet, so a contrasting palette keeps
+  the pins and the bar legible on camera.
+
+  What each section is here to exercise:
+    nav .............. small targets crowded together, and a sticky bar the overlay must survive
+    hero ............. one obvious headline + CTA, the simplest possible first annotation
+    stats ............ a tight row where a region is more natural than four separate notes
+    features ......... a card grid — the canonical "make these two-up on mobile" region
+    pricing .......... three near-identical siblings, so the selector has to tell them apart
+    tabs ............. rebuilds its panel on every switch, so pins must re-find or hide
+    table ............ dense repeated rows, the nastiest thing to target by clicking
+    form ............. labels, inputs, a select and a checkbox row
+    footer ........... low-contrast small print, a natural "this is unreadable" note
+-->
+<style>
+  :root {
+    --ink: #14181f;
+    --ink-2: #4a5563;
+    --ink-3: #7c8794;
+    --line: #e4e7ec;
+    --bg: #ffffff;
+    --bg-2: #f7f8fa;
+    --brand: #0f766e;         /* deep teal — far from Pinpoint's violet */
+    --brand-ink: #ffffff;
+    --brand-soft: #ecfdf5;
+    --warn: #b45309;
+    --radius: 10px;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+  a { color: var(--brand); }
+
+  /* nav */
+  header { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.88); backdrop-filter: saturate(180%) blur(10px); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+  .logo .dot { width: 18px; height: 18px; border-radius: 5px; background: var(--brand); }
+  .nav nav { display: flex; gap: 22px; margin-left: 8px; }
+  .nav nav a { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  .nav nav a:hover { color: var(--ink); }
+  .nav .spacer { flex: 1; }
+  .btn { border: 0; border-radius: 8px; padding: 9px 15px; font: 600 14px var(--sans); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+  .btn.primary { background: var(--brand); color: var(--brand-ink); }
+  .btn.ghost { background: transparent; color: var(--ink-2); }
+  .btn.quiet { background: var(--bg-2); color: var(--ink); }
+
+  /* hero */
+  .hero { padding: 84px 0 64px; }
+  .eyebrow { display: inline-block; background: var(--brand-soft); color: var(--brand); font: 600 12px var(--sans); padding: 5px 10px; border-radius: 999px; }
+  .hero h1 { font-size: 54px; line-height: 1.05; letter-spacing: -.03em; margin: 18px 0 16px; max-width: 16ch; }
+  .hero p { font-size: 18px; line-height: 1.6; color: var(--ink-2); max-width: 54ch; margin: 0 0 28px; }
+  .hero .cta { display: flex; gap: 12px; align-items: center; }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin: 56px 0; }
+  .stat { background: var(--bg); padding: 22px 20px; }
+  .stat .v { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+  .stat .k { font-size: 13px; color: var(--ink-3); margin-top: 4px; }
+
+  /* sections */
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  .sec-head { max-width: 60ch; margin-bottom: 32px; }
+  .sec-head h2 { font-size: 30px; letter-spacing: -.02em; margin: 0 0 10px; }
+  .sec-head p { color: var(--ink-2); font-size: 16px; line-height: 1.6; margin: 0; }
+
+  /* features */
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .feature { border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+  .feature .ic { width: 34px; height: 34px; border-radius: 9px; background: var(--brand-soft); display: grid; place-items: center; margin-bottom: 14px; }
+  .feature h3 { font-size: 16px; margin: 0 0 7px; }
+  .feature p { font-size: 14px; line-height: 1.6; color: var(--ink-2); margin: 0; }
+
+  /* pricing */
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+  .tier { border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .tier.featured { border-color: var(--brand); box-shadow: 0 8px 28px rgba(15,118,110,.10); }
+  .tier .name { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+  .tier .price { font-size: 36px; font-weight: 700; letter-spacing: -.02em; margin: 10px 0 2px; }
+  .tier .price span { font-size: 14px; font-weight: 500; color: var(--ink-3); }
+  .tier ul { list-style: none; padding: 0; margin: 18px 0 22px; }
+  .tier li { font-size: 14px; color: var(--ink-2); padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .tier .btn { width: 100%; justify-content: center; }
+
+  /* tabs — rebuilds its panel on every switch */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+  .tab { background: none; border: 0; padding: 11px 14px; font: 600 14px var(--sans); color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+  .panel-body { min-height: 190px; }
+  .panel-body .row { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .panel-body .row .k { color: var(--ink-3); }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  td { padding: 13px 12px; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+  td.id { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+  .pill.ok { background: #ecfdf5; color: #047857; }
+  .pill.hold { background: #fffbeb; color: var(--warn); }
+  .pill.late { background: #fef2f2; color: #b91c1c; }
+
+  /* form */
+  .form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 20px; max-width: 720px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 13px; font-weight: 600; }
+  input, select, textarea { font: 14px var(--sans); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  .checks { display: flex; gap: 18px; flex-wrap: wrap; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ink-2); }
+
+  /* footer */
+  footer { border-top: 1px solid var(--line); background: var(--bg-2); padding: 40px 0 56px; }
+  .fgrid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 28px; }
+  footer h4 { font-size: 13px; margin: 0 0 10px; }
+  footer a { display: block; font-size: 13px; color: var(--ink-2); text-decoration: none; padding: 4px 0; }
+  /* deliberately too light — a natural "this is unreadable" annotation */
+  .fineprint { margin-top: 30px; font-size: 11px; color: #c3c9d1; }
+
+  @media (max-width: 900px) {
+    .stats, .features, .tiers, .fgrid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 36px; }
+    .form { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo"><span class="dot"></span> Northwind Freight</div>
+    <nav>
+      <a href="#features">Platform</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#shipments">Shipments</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <span class="spacer"></span>
+    <a class="btn ghost" href="#">Sign in</a>
+    <a class="btn primary" href="#">Book a demo</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <span class="eyebrow">Now routing in 14 countries</span>
+    <h1>Freight that explains itself.</h1>
+    <p>Every shipment, every exception, every invoice line — in one place your ops team and your
+       customers can both read. No spreadsheets at midnight.</p>
+    <div class="cta">
+      <a class="btn primary" href="#">Start free trial</a>
+      <a class="btn quiet" href="#">Watch the 3-minute tour</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="v">31,904</div><div class="k">Shipments this quarter</div></div>
+      <div class="stat"><div class="v">99.2%</div><div class="k">On-time delivery</div></div>
+      <div class="stat"><div class="v">4.7h</div><div class="k">Median exception time</div></div>
+      <div class="stat"><div class="v">$2.1M</div><div class="k">Recovered in claims</div></div>
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Built for the people who chase the truck</h2>
+        <p>Not a dashboard nobody opens. The three things your team actually does all day, made fast.</p>
+      </div>
+      <div class="features">
+        <div class="feature">
+          <div class="ic">◷</div>
+          <h3>Live exception queue</h3>
+          <p>Delays, damages and customs holds land in one queue with the paperwork already attached.</p>
+        </div>
+        <div class="feature">
+          <div class="ic">⇄</div>
+          <h3>Carrier-agnostic rating</h3>
+          <p>Compare thirty carriers on landed cost, not list rate, and book without leaving the page.</p>
+        </div>
+        <div class="feature">
+          <div class="ic">◱</div>
+          <h3>Customer-safe tracking</h3>
+          <p>A tracking page you can send to a customer without exposing margins or carrier names.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Pricing</h2>
+        <p>Per shipment, not per seat. Invite the whole warehouse.</p>
+      </div>
+      <div class="tiers">
+        <div class="tier">
+          <div class="name">Starter</div>
+          <div class="price">$0<span> / month</span></div>
+          <ul><li>Up to 200 shipments</li><li>Exception queue</li><li>Email support</li></ul>
+          <a class="btn quiet" href="#">Choose Starter</a>
+        </div>
+        <div class="tier featured">
+          <div class="name">Growth</div>
+          <div class="price">$490<span> / month</span></div>
+          <ul><li>Up to 12,000 shipments</li><li>Carrier rating + booking</li><li>Customer tracking pages</li></ul>
+          <a class="btn primary" href="#">Choose Growth</a>
+        </div>
+        <div class="tier">
+          <div class="name">Enterprise</div>
+          <div class="price">Talk<span> to us</span></div>
+          <ul><li>Unlimited shipments</li><li>SSO and audit log</li><li>Named support engineer</li></ul>
+          <a class="btn quiet" href="#">Contact sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="detail">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Shipment SF-4471</h2>
+        <p>Switching tabs rebuilds this panel from scratch — the interesting case for anything anchored to it.</p>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-tab="route">Route</button>
+        <button class="tab" data-tab="costs">Costs</button>
+        <button class="tab" data-tab="docs">Documents</button>
+      </div>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+  </section>
+
+  <section id="shipments">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Recent shipments</h2>
+        <p>Dense repeated rows — the kind of thing that is painful to describe in words.</p>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Reference</th><th>Lane</th><th>Carrier</th><th>ETA</th><th>Status</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Talk to us</h2>
+        <p>Tell us what you move and we will show you the exception queue with your own lanes in it.</p>
+      </div>
+      <form class="form" onsubmit="return false">
+        <div class="field"><label for="name">Full name</label><input id="name" placeholder="Ada Lovelace" /></div>
+        <div class="field"><label for="email">Work email</label><input id="email" type="email" placeholder="ada@company.com" /></div>
+        <div class="field"><label for="company">Company</label><input id="company" placeholder="Northwind Ltd" /></div>
+        <div class="field">
+          <label for="volume">Monthly shipments</label>
+          <select id="volume"><option>Under 500</option><option>500 – 5,000</option><option>5,000 – 25,000</option><option>25,000+</option></select>
+        </div>
+        <div class="field full"><label for="note">Anything we should know?</label><textarea id="note" rows="3" placeholder="Lanes, carriers, the thing that keeps breaking…"></textarea></div>
+        <div class="field full">
+          <div class="checks">
+            <label class="check"><input type="checkbox" /> Air freight</label>
+            <label class="check"><input type="checkbox" /> Ocean FCL</label>
+            <label class="check"><input type="checkbox" /> Ocean LCL</label>
+            <label class="check"><input type="checkbox" /> Road</label>
+            <label class="check"><input type="checkbox" /> Rail</label>
+            <label class="check"><input type="checkbox" /> Customs brokerage</label>
+          </div>
+        </div>
+        <div class="field full"><button class="btn primary" type="submit">Request a walkthrough</button></div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="fgrid">
+      <div>
+        <div class="logo"><span class="dot"></span> Northwind Freight</div>
+        <p style="font-size:13px;color:var(--ink-2);line-height:1.6;max-width:34ch;margin:12px 0 0;">
+          Freight visibility for teams who would rather fix the problem than find it.</p>
+      </div>
+      <div><h4>Platform</h4><a href="#">Exceptions</a><a href="#">Rating</a><a href="#">Tracking</a></div>
+      <div><h4>Company</h4><a href="#">About</a><a href="#">Careers</a><a href="#">Press</a></div>
+      <div><h4>Legal</h4><a href="#">Privacy</a><a href="#">Terms</a><a href="#">DPA</a></div>
+    </div>
+    <p class="fineprint">© 2026 Northwind Freight Ltd. Rates shown exclude duties, taxes and surcharges applicable at destination. Transit estimates are indicative and not contractual.</p>
+  </div>
+</footer>
+
+<script>
+  // Tabs rebuild the panel wholesale on every switch — the case where anything anchored inside
+  // has to re-find its element or admit it is gone.
+  const PANELS = {
+    route: [["Origin", "Rotterdam, NL — Terminal 4"], ["Destination", "Newark, NJ — Pier 6"],
+            ["Mode", "Ocean FCL · 40ft high cube"], ["Vessel", "MV Aurelia · voyage 22W"],
+            ["Departed", "3 Sep 2026, 04:10 CEST"]],
+    costs: [["Freight", "$3,120.00"], ["Bunker adjustment", "$418.60"], ["Terminal handling", "$265.00"],
+            ["Customs entry", "$140.00"], ["Total landed", "$3,943.60"]],
+    docs:  [["Bill of lading", "BL-4471-RTM.pdf"], ["Packing list", "PL-4471.pdf"],
+            ["Commercial invoice", "INV-88213.pdf"], ["Certificate of origin", "COO-4471.pdf"]],
+  };
+  const body = document.getElementById("panelBody");
+  function paint(which) {
+    body.innerHTML = PANELS[which]
+      .map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+      .join("");
+  }
+  document.querySelectorAll(".tab").forEach((t) =>
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((o) => o.classList.toggle("on", o === t));
+      paint(t.dataset.tab);
+    })
+  );
+  paint("route");
+
+  const ROWS = [
+    ["SF-4471", "Rotterdam → Newark", "Maersk", "12 Sep", "ok", "On track"],
+    ["SF-4468", "Shenzhen → Long Beach", "ONE", "14 Sep", "hold", "Customs hold"],
+    ["SF-4462", "Hamburg → Montreal", "Hapag-Lloyd", "9 Sep", "ok", "On track"],
+    ["SF-4455", "Busan → Oakland", "HMM", "6 Sep", "late", "Delayed 3d"],
+    ["SF-4451", "Antwerp → Savannah", "MSC", "11 Sep", "ok", "On track"],
+    ["SF-4447", "Singapore → Seattle", "Evergreen", "18 Sep", "hold", "Docs missing"],
+  ];
+  document.getElementById("rows").innerHTML = ROWS
+    .map(([id, lane, carrier, eta, cls, label]) =>
+      `<tr><td class="id">${id}</td><td>${lane}</td><td>${carrier}</td><td>${eta}</td><td><span class="pill ${cls}">${label}</span></td></tr>`)
+    .join("");
+</script>
+</body>
+</html>

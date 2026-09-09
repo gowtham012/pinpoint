@@ -236,7 +236,8 @@ for (const [name, mk] of [["http", httpClient], ["stdio", stdioClient]]) {
     assert.match(text(await c.callTool({ name: "list_annotations", arguments: {} })), /^#2 \[mcp00002\] second/m);
     assert.doesNotMatch(text(await c.callTool({ name: "list_annotations", arguments: {} })), /\] first/);
     assert.match(text(await c.callTool({ name: "list_annotations", arguments: { status: "all" } })), /first/);
-    const bad = await c.callTool({ name: "resolve_annotation", arguments: { id: "zzz" } });
+    // note is required now — pass one so this still tests an unknown id, not a bad schema
+    const bad = await c.callTool({ name: "resolve_annotation", arguments: { id: "zzz", note: "n/a" } });
     assert.equal(bad.isError, true);
 
     const waiting = c.callTool({ name: "wait_for_annotation", arguments: { timeoutSeconds: 5 } });
@@ -252,6 +253,26 @@ for (const [name, mk] of [["http", httpClient], ["stdio", stdioClient]]) {
   });
 }
 
+test("resolve_annotation demands a real reply, because the developer reads it", async () => {
+  // Resolving used to take an optional note, so agents skipped it and every finished annotation
+  // came back with resolution: null — leaving the developer with a vanished pin and no idea what
+  // had been done. The note is the reply shown in their browser, so it is required.
+  await post(sample({ id: "reply001", comment: "make this bigger" }));
+  const c = new Client({ name: "t", version: "1" });
+  await c.connect(new StreamableHTTPClientTransport(new URL(BASE + "/mcp")));
+
+  const tool = (await c.listTools()).tools.find((t) => t.name === "resolve_annotation");
+  assert.ok(!(tool.inputSchema.required || []).includes("note") === false, "note must be a required input");
+  assert.match(JSON.stringify(tool.description), /what you actually changed|what changed and where/i,
+    "the description has to ask for something specific, not just a flag");
+
+  const ok = await c.callTool({ name: "resolve_annotation", arguments: { id: "reply001", note: "Bumped to 40px in Hero.tsx:12" } });
+  assert.match(JSON.stringify(ok.content), /Resolved/);
+  const [done] = (await get("/annotations?status=resolved")).annotations.filter((a) => a.id === "reply001");
+  assert.equal(done.resolution, "Bumped to 40px in Hero.tsx:12", "the reply is stored for the browser to show");
+  await c.close();
+});
+
 test("MCP http: 20 concurrent stateless requests all succeed", async () => {
   await post(sample({ id: "conc0001" }));
   const clients = await Promise.all(Array.from({ length: 20 }, httpClient));
@@ -265,7 +286,7 @@ test("stdio MCP falls back to the JSON file when the daemon is down (reads and r
   const c = await stdioClient();
   const list = text(await c.callTool({ name: "list_annotations", arguments: {} }));
   assert.match(list, /conc0001/);
-  assert.match(text(await c.callTool({ name: "resolve_annotation", arguments: { id: "conc0001" } })), /Resolved/);
+  assert.match(text(await c.callTool({ name: "resolve_annotation", arguments: { id: "conc0001", note: "changed it" } })), /Resolved/);
   const to = await c.callTool({ name: "wait_for_annotation", arguments: { timeoutSeconds: 1 } });
   assert.match(text(to), /Timed out/);
   await c.close();

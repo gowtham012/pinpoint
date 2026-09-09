@@ -251,7 +251,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
       }
       case "list": {
-        const q = msg.url ? `?status=pending&url=${encodeURIComponent(msg.url)}` : "?status=pending";
+        const status = msg.status === "resolved" ? "resolved" : "pending";
+        const q = msg.url ? `?status=${status}&url=${encodeURIComponent(msg.url)}` : `?status=${status}`;
         return bridgeFetch(`/annotations${q}`);
       }
       case "delete": {

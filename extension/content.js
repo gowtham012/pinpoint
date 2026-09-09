@@ -9,6 +9,7 @@
   let hovered = null;
   let selected = null;
   let pins = []; // { id, number, selector, comment, el }
+  let replies = []; // resolved annotations for this page, with what the agent said back
 
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   const K_SEND = MAC ? "\u2318\u21a9" : "Ctrl+Enter";
@@ -258,6 +259,17 @@
       .panel .item .s { font: 10px/1.5 var(--mono); color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .panel .item.gone .c { opacity: .5; }
       .panel .item .s .warn { color: #c2860a; }
+      .panel .group { padding: 14px 8px 5px; font: 600 10px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+      .panel .item.done { cursor: default; }
+      .panel .item.done:hover { background: none; }
+      .panel .item.done .n { background: var(--surface-2); color: var(--ink-dim); }
+      .panel .item.done .c { color: var(--ink-dim); }
+      /* The agent's answer, in the agent's colour — the same orange its avatar uses. */
+      .panel .reply { margin-top: 6px; padding: 6px 0 0 9px; border-left: 2px solid var(--agent);
+                      font-size: 12px; line-height: 1.45; color: var(--ink); }
+      .panel .reply .who { display: block; font: 600 10px/1 var(--sans); letter-spacing: .06em;
+                           text-transform: uppercase; color: var(--agent); margin-bottom: 4px; }
+      .panel .reply.none { color: var(--ink-dim); font-style: italic; }
       .panel .empty { padding: 18px 14px; color: var(--ink-dim); font-size: 12.5px; line-height: 1.5; }
 
       /* ---------- toast ---------- */
@@ -755,7 +767,7 @@
 
   function renderPanel() {
     ui.panelList.innerHTML = "";
-    if (!pins.length) {
+    if (!pins.length && !replies.length) {
       ui.panelList.innerHTML = `<li class="empty">Nothing marked on this page yet. Turn on Pinpoint and click anything you want changed.</li>`;
       return;
     }
@@ -769,6 +781,30 @@
         ? `<span class="warn">not on this view</span>`
         : escapeHtml(p.selector);
       li.addEventListener("click", () => revealPin(p));
+      ui.panelList.appendChild(li);
+    }
+
+    // A note used to simply vanish when the agent finished it, so you never saw what it did.
+    // It stays here instead, with the agent's own answer underneath.
+    if (!replies.length) return;
+    const head = document.createElement("li");
+    head.className = "group";
+    head.textContent = `Done by your agent (${replies.length})`;
+    ui.panelList.appendChild(head);
+
+    for (const a of replies) {
+      const li = document.createElement("li");
+      li.className = "item done";
+      li.innerHTML = `<span class="n"></span><div class="body"><div class="c"></div><div class="reply"><span class="who"></span><span class="what"></span></div></div>`;
+      li.querySelector(".n").textContent = a.number;
+      li.querySelector(".c").textContent = a.comment;
+      li.querySelector(".who").textContent = "agent";
+      const what = li.querySelector(".what");
+      if (a.resolution) what.textContent = a.resolution;
+      else {
+        what.textContent = "marked done without a note";
+        li.querySelector(".reply").classList.add("none");
+      }
       ui.panelList.appendChild(li);
     }
   }
@@ -1302,8 +1338,17 @@
       positionAll();
       paintDock();
       setAgent(res.agent ? { ...res.agent, seenAt: Date.now() } : null);
+      await loadReplies();
       if (ui.panel.style.display === "flex") renderPanel();
     } catch {}
+  }
+
+  // What the agent has already finished on this page, newest first.
+  async function loadReplies() {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "list", status: "resolved", url: location.href.split("#")[0] });
+      replies = (res?.annotations || []).slice().sort((a, b) => String(b.resolvedAt || "").localeCompare(String(a.resolvedAt || "")));
+    } catch { replies = []; }
   }
   loadPins();
   refreshDock();

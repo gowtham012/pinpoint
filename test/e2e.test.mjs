@@ -1037,6 +1037,39 @@ test("the dock shows a live count and opens a list of this page's notes", async 
   await page.close();
 });
 
+test("a finished note stays in the panel, showing what the agent said", async () => {
+  // It used to just vanish, so you never learned what the agent actually did.
+  await clearAll();
+  const page = await openPage("/");
+  await annotate(page, page.locator("h1"), "make this bigger");
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 1, null, { timeout: 6000 });
+
+  const [a] = await pending();
+  await fetch(`${BASE}/annotations/${a.id}/resolve`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ note: "Bumped it to 40px in Hero.tsx:12" }),
+  });
+  // the pin clears from the page, as before
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 0, null, { timeout: 6000 });
+
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .count")?.click());
+  const panel = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    const done = r.querySelector(".panel .item.done");
+    return {
+      open: r.querySelector(".panel").style.display === "flex",
+      group: r.querySelector(".panel .group")?.textContent || "",
+      comment: done?.querySelector(".c")?.textContent || "",
+      reply: done?.querySelector(".what")?.textContent || "",
+    };
+  });
+  assert.equal(panel.open, true, "the counter still opens the panel");
+  assert.match(panel.group, /Done by your agent/);
+  assert.match(panel.comment, /make this bigger/, "the note you wrote is still there");
+  assert.match(panel.reply, /Bumped it to 40px in Hero\.tsx:12/, "and the agent's answer is shown");
+  await page.close();
+});
+
 test("the dock can be hidden per site, and brought back from the popup", async () => {
   const page = await openPage("/");
   await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock").style.display === "flex", null, { timeout: 6000 });
