@@ -151,7 +151,7 @@ switch (cmd) {
         `Do this now, before anything else:`,
         `1. Say in one short line what is waiting (for example: "2 notes pending: the Registration ID label, the Email label").`,
         `2. If their message below is about the interface, or if they have not asked for anything else, make ${fresh.length || older.length === 1 ? "the change" : "the changes"}.`,
-        `3. After each one is done, run \`node ${SELF} resolve <id>\` (or the pinpoint MCP tool resolve_annotation) so the marker clears in their browser. Never say something is done without resolving it.`,
+        `3. After each one is done, resolve it WITH a note saying what you changed and where — \`node ${SELF} resolve <id> --note "what you changed"\`, or the pinpoint MCP tool resolve_annotation. The marker clears in their browser and your note is shown there as your reply, so "done" is not an answer. Never say something is done without resolving it.`,
         `Never ignore this block silently — if you are not going to act on it now, say so.`,
         ``
       );
@@ -179,11 +179,13 @@ switch (cmd) {
   case "resolve": {
     const ids = positionals();
     if (!ids.length) {
-      console.error("usage: pinpoint resolve <id|number> [...]");
+      console.error('usage: node cli.js resolve <id|number> [...] [--note "what you changed"]');
       process.exit(2);
     }
     let ok = 0;
-    for (const id of ids) (await resolveOne(id)) ? ok++ : console.error(`no annotation "${id}"`);
+    // The note is the developer's answer, shown in their browser next to what they asked for.
+    const note = opt("note", null);
+    for (const id of ids) (await resolveOne(id, note)) ? ok++ : console.error(`no annotation "${id}"`);
     console.error(`[pinpoint] resolved ${ok}/${ids.length}`);
     process.exitCode = ok === ids.length ? 0 : 1;
     break;

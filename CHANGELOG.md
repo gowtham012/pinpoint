@@ -82,6 +82,14 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
 - The popup honours `prefers-color-scheme`; it was a white flash in a dark browser.
 
 ### Added
+- **You can see what your agent did.** A finished note used to disappear, leaving you with a
+  vanished pin and no idea what changed. It now stays in the notes panel with the agent's reply
+  underneath it. That reply is the `note` on `resolve_annotation`, which was optional and so was
+  simply skipped — every resolved annotation came back with `resolution: null`. It is required now,
+  and the tool says plainly that the developer reads it in their browser and that "done" is not an
+  answer. `cli.js resolve` gained `--note` to match; it accepted one internally but never passed it.
+- `demo/index.html` — a self-contained demo site for trying Pinpoint and filming it: card grid,
+  pricing tiers, near-identical siblings, a tab panel that rebuilds itself, a dense table, a form.
 - **Region selection.** Drag instead of clicking to mark an area rather than a single element.
   A box has no element of its own, so it is anchored to the deepest element that fully contains
   it — which is what lets a region pin re-find itself after a re-render exactly as an element pin

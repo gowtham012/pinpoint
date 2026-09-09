@@ -90,6 +90,16 @@ Some changes are about a group, not a control — *"make these cards two-up on m
 
 A box has no element of its own, so it is anchored to the **deepest element that fully contains it**. That is what lets a region pin survive a re-render exactly as an element pin does, and it means your agent gets a real container to change — plus the list of what the box contained, and a screenshot cropped to the box — rather than four coordinates.
 
+### Seeing what your agent did
+
+A finished note does not just vanish. It stays in the panel with your agent's own reply underneath,
+so you can read what changed without going back to the terminal.
+
+![The notes panel: a pending note, and a finished one with the agent's reply beneath it](docs/images/agent-reply.png)
+
+That reply is the `note` your agent passes to `resolve_annotation`, which is **required** — the tool
+tells it that you read this in your browser, and that "done" is not an answer.
+
 The bar also shows who is present: you, and your coding agent. When the agent reads your notes, opens one, or finishes one, its avatar lights up and the bar says what it is doing — the note it is looking at gets a ring, and a note it completes disappears in front of you. The bar's counter opens a list of everything marked on the page; click a row to jump to it. The **×** hides the bar for that site (the toolbar popup brings it back, and can move it to any corner).
 
 A numbered pin sticks to the element. Pins live in the bridge, not the page, so they survive reloads, appear in every tab showing that page, and vanish the moment your agent marks the change done — no reload needed. On apps that rebuild their DOM (a step change, a route change, a re-render) each pin re-finds its own element by identity, and hides itself rather than sit on a different element that happens to match the old selector.
@@ -213,6 +223,17 @@ re-run `install-hooks`). You can always just say *"apply my pinpoint annotations
 
 **Nothing works and you want a clean slate.** `node cli.js clear` empties the store;
 `~/.pinpoint/annotations.json` is the only state outside your repo.
+
+## A page to try it on
+
+`demo/index.html` is a self-contained demo site — no build, no network — with the shapes that make
+Pinpoint worth using: a card grid and pricing tiers for region drags, near-identical sibling buttons
+that a selector has to tell apart, a tab panel that rebuilds itself so you can watch pins re-find
+their element, a dense table, and a form.
+
+```bash
+cd demo && python3 -m http.server 8080     # then open http://localhost:8080
+```
 
 ## Testing
 
