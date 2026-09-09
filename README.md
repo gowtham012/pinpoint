@@ -10,8 +10,6 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
 ```
 
-![Pinpoint on a local dev page: the bar in the corner, and a numbered pin on the field being changed](docs/images/hero.png)
-
 ## Quick start
 
 You need **Node 18+** and a Chromium browser (Chrome, Arc, Brave or Edge). The `claude` CLI is
