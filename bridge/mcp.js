@@ -25,6 +25,18 @@ export function createMcpServer(api) {
     }
   );
 
+  // Who is calling. The MCP initialize handshake carries the client's own name and version
+  // ("claude-code", "cursor-vscode", "codex"…) and the SDK keeps it on the connection — so the
+  // browser can say WHICH agent is working and WHICH one answered a note, rather than "your agent".
+  // Over the daemon's stateless HTTP transport there is a fresh server per request, so this is
+  // populated only on the request that carried initialize; over stdio it lasts the whole session.
+  const who = () => {
+    try {
+      const c = server.server.getClientVersion();
+      return c?.name ? { name: c.name, version: c.version || null } : null;
+    } catch { return null; }
+  };
+
   server.registerTool(
     "get_pending_annotations",
     {
@@ -33,7 +45,7 @@ export function createMcpServer(api) {
       inputSchema: { url: z.string().optional().describe("Only annotations whose page URL starts with this") },
     },
     async ({ url }) => {
-      api.touch?.("read", null, "reading your notes");
+      api.touch?.("read", null, "reading your notes", who());
       let db = await api.db();
       // A crop is attached a beat after its comment. If any pending item is still waiting for one,
       // give it a moment rather than handing the agent a task list with missing pictures.
@@ -61,7 +73,7 @@ export function createMcpServer(api) {
       inputSchema: { status: z.enum(["pending", "resolved", "all"]).optional() },
     },
     async ({ status = "pending" }) => {
-      api.touch?.("read", null, "reading your notes");
+      api.touch?.("read", null, "reading your notes", who());
       const db = await api.db();
       const items = db.annotations.filter((a) => status === "all" || a.status === status);
       return { content: [{ type: "text", text: items.length ? items.map(summaryLine).join("\n") : `No ${status} annotations.` }] };
@@ -78,7 +90,7 @@ export function createMcpServer(api) {
     async ({ id }) => {
       const db = await api.db();
       const a = findAnnotation(db, id);
-      api.touch?.("look", a?.id || null, a ? `looking at #${a.number}` : "looking");
+      api.touch?.("look", a?.id || null, a ? `looking at #${a.number}` : "looking", who());
       if (!a) return { content: [{ type: "text", text: `No annotation ${id}` }], isError: true };
       return { content: [{ type: "text", text: toMarkdown(a) }, ...imageBlock(a)] };
     }
@@ -99,10 +111,14 @@ export function createMcpServer(api) {
       },
     },
     async ({ id, note }) => {
+      const me = who();
       const before = findAnnotation(await api.db(), id);
-      const r = await api.resolve(id, note);
-      if (r) api.touch?.("resolve", before?.id || null, `done with #${before?.number ?? id}`);
-      return { content: [{ type: "text", text: r ? `Resolved ${id}.` : `No annotation ${id}` }], isError: !r };
+      const r = await api.resolve(id, note, me?.name);
+      if (r) api.touch?.("resolve", before?.id || null, `done with #${before?.number ?? id}`, me);
+      const text = r === "already"
+        ? `Resolved ${id} — but another agent had already resolved it, so your note replaced theirs. Check with them before doing more of the same work.`
+        : r ? `Resolved ${id}.` : `No annotation ${id}`;
+      return { content: [{ type: "text", text }], isError: !r };
     }
   );
 
@@ -110,11 +126,11 @@ export function createMcpServer(api) {
     "wait_for_annotation",
     {
       title: "Wait for the next annotation",
-      description: "Block until the developer adds a new annotation in the browser (or timeout). Useful for a live 'watch' loop: wait → apply → resolve → wait.",
+      description: "Block until the developer adds a new annotation in the browser (or timeout). Useful for a live 'watch' loop: wait → apply → resolve → wait. Each new annotation is handed to exactly one waiting agent, so several agents can watch at once without doing the same note twice.",
       inputSchema: { timeoutSeconds: z.number().min(1).max(600).optional().describe("Default 120") },
     },
     async ({ timeoutSeconds = 120 }) => {
-      api.touch?.("wait", null, "waiting for your next note");
+      api.touch?.("wait", null, "waiting for your next note", who());
       let a = await api.waitForNext(timeoutSeconds * 1000);
       if (!a) return { content: [{ type: "text", text: "Timed out, no new annotation." }] };
       // The comment is stored before its screenshot; give the crop a moment to land.

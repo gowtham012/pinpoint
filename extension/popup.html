@@ -52,6 +52,8 @@
   footer select { border: 1px solid var(--field); border-radius: 6px; padding: 3px 4px; font: inherit; background: var(--surface); color: var(--ink); }
   footer a { color: var(--accent); margin-left: auto; text-decoration: none; }
   .hint { font-size: 11px; color: var(--ink-dim); line-height: 1.4; }
+  .hint code { font: 10.5px/1.5 ui-monospace, Menlo, monospace; background: var(--surface-2); border-radius: 4px; padding: 1px 4px; word-break: break-all; }
+  #bridge .bg { width: 14px; text-align: center; }
   .where { display: none; font-size: 11.5px; line-height: 1.45; color: var(--note-ink); background: var(--note-bg); border: 1px solid var(--note-line); border-radius: 8px; padding: 8px 10px; }
   button kbd { margin-left: auto; }
 </style>
@@ -68,6 +70,7 @@
     <button id="copyAll">⧉ Copy all as one prompt</button>
     <button id="clear">🗑 Clear all annotations</button>
     <button id="showbar">▾ Show the on-page bar here</button>
+    <button id="bridge"><span class="bg">▶</span><span class="bl">Start bridge</span></button>
     <div class="hint" id="hint"></div>
   </main>
   <ul id="list"></ul>

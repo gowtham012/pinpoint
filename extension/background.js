@@ -9,6 +9,7 @@ const chrome = globalThis.browser ?? globalThis.chrome;
 
 const DEFAULT_PORT = 7331;
 const WATCH_ALARM = "pinpoint-watch";
+const NATIVE_HOST = "com.pinpoint.bridge";
 
 // Pinpoint is a tool for the app you are building, not a thing that follows you around the web.
 // It runs on local development pages only; anywhere else you have to turn it on deliberately,
@@ -251,6 +252,50 @@ async function finishCapture(tab, capture, id, expectedUrl) {
   }
 }
 
+// ---------- starting and restarting the bridge ----------
+// A content script cannot reach native messaging — only this worker, the popup and other extension
+// pages can. Never add a chrome.runtime.onMessageExternal handler: without one, other installed
+// extensions cannot reach these cases either, and that is the whole containment.
+//
+// The port is read from storage here and NEVER taken from the message, so the most a compromised
+// page could ask for is "start the bridge on the port I already configured in the popup".
+function hostError(e) {
+  const m = String(e?.message || e || "");
+  if (/not found|not installed|Access to the specified native messaging host is forbidden/i.test(m)) return "no_host";
+  if (/exited|Error when communicating/i.test(m)) return "no_node";
+  return "no_host"; // an unrecognised failure here is almost always "run the installer"
+}
+
+async function startBridge() {
+  if (typeof chrome.runtime.sendNativeMessage !== "function") {
+    return { ok: false, code: "unsupported", error: "This browser cannot start the bridge for you — start it in a terminal." };
+  }
+  const port = await getPort();
+  let r;
+  try {
+    r = await chrome.runtime.sendNativeMessage(NATIVE_HOST, { cmd: "start", port });
+  } catch (e) {
+    return { ok: false, code: hostError(e), error: String(e.message || e) };
+  }
+  if (r?.ok) { refreshBadge(); watch(); broadcastReload(); }
+  return r || { ok: false, code: "no_host", error: "no reply from the launcher" };
+}
+
+// Restart is plain HTTP to the daemon, not native messaging: it needs no launcher, works in every
+// browser, and never gives anything reachable from a page the authority to kill a process.
+async function restartBridge() {
+  await bridgeFetch("/restart", { method: "POST" });
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    try {
+      const h = await health();
+      refreshBadge(); watch(); broadcastReload();
+      return { ok: true, ...h };
+    } catch {}
+  }
+  return { ok: false, error: "the bridge did not come back — start it in a terminal to see why" };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     switch (msg.type) {
@@ -308,6 +353,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return { ok: false, error: String(e.message || e) };
         }
       }
+      case "startBridge":
+        return startBridge();
+      case "restartBridge":
+        return restartBridge();
       case "refreshBadge":
         return refreshBadge();
       // A content script that handled the shortcut itself asks us to mirror it into sibling frames.

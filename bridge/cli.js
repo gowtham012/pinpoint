@@ -13,6 +13,7 @@ Usage
   node cli.js print                    print pending annotations as markdown
   node cli.js resolve <id...>          mark annotations done (pins disappear in the browser)
   node cli.js install-hooks [dir]      set up Claude Code so annotations arrive automatically
+  node cli.js install-native-host      let the extension's "Start bridge" button start the bridge
   node cli.js status                   is the bridge running? how many pending?
   node cli.js clear                    delete all annotations
 
@@ -22,6 +23,8 @@ Options
   --print           echo each new annotation to stdout as it arrives
   --consume         (with print) mark everything printed as resolved
   --quiet           no log output
+  --uninstall       (with install-native-host) remove it again
+  --id <id>         (with install-native-host) also allow this extension id
 
 Files
   ${DATA_FILE}   annotations (screenshots inline, no loose image files)
@@ -35,7 +38,7 @@ Examples
 const args = process.argv.slice(2);
 // The subcommand may sit after flags (`--port 7332 status`), so find it wherever it is rather
 // than only at position 0 — otherwise a flag-first invocation silently starts a daemon instead.
-const CMDS = ["start", "mcp", "print", "resolve", "install-hooks", "status", "clear", "help"];
+const CMDS = ["start", "mcp", "print", "resolve", "install-hooks", "install-native-host", "status", "clear", "help"];
 const VALUE_FLAGS = ["--port", "--project"];
 function pickCommand() {
   // A leading positional is the command, whatever it is — so an unknown one still reports itself
@@ -58,7 +61,7 @@ function positionals() {
   const out = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
-      if (args[i + 1] && !args[i + 1].startsWith("--") && !["print", "consume", "quiet", "hook"].includes(args[i].slice(2))) i++;
+      if (args[i + 1] && !args[i + 1].startsWith("--") && !["print", "consume", "quiet", "hook", "uninstall"].includes(args[i].slice(2))) i++;
       continue;
     }
     out.push(args[i]);
@@ -93,7 +96,8 @@ switch (cmd) {
   case "start": {
     const { startDaemon } = await import("./daemon.js");
     try {
-      await startDaemon({ port, project: opt("project", process.env.PINPOINT_PROJECT || null), print: flag("print"), quiet: flag("quiet") });
+      // restartable: this IS its own process, so POST /restart may re-exec it.
+      await startDaemon({ port, project: opt("project", process.env.PINPOINT_PROJECT || null), print: flag("print"), quiet: flag("quiet"), restartable: true });
     } catch (e) {
       if (e.code === "EADDRINUSE") {
         console.error(`[pinpoint] port ${port} is already in use.`);
@@ -213,6 +217,27 @@ switch (cmd) {
     console.error(`[pinpoint] ${r.message}`);
     console.error(`[pinpoint] ${r.file}`);
     if (r.added.length) console.error(`[pinpoint] hooks: ${r.added.join(", ")}`);
+    break;
+  }
+
+  case "install-native-host": {
+    const { installNativeHost } = await import("./native-host.js");
+    // Repeatable --id, for a second checkout or a differently-packed build.
+    const ids = args.reduce((a, x, i) => (x === "--id" && args[i + 1] ? [...a, args[i + 1]] : a), []);
+    let r;
+    try {
+      r = installNativeHost({ ids, uninstall: flag("uninstall"), project: opt("project", process.env.PINPOINT_PROJECT || null) });
+    } catch (e) {
+      console.error(`[pinpoint] ${e.message}`);
+      process.exit(1);
+    }
+    console.error(`[pinpoint] ${r.message}`);
+    for (const f of r.removed || r.files) console.error(`[pinpoint] ${r.removed ? "removed" : "wrote"} ${f}`);
+    if (!r.removed) {
+      console.error(`[pinpoint] launcher ${r.wrapperPath}  (node: ${r.node})`);
+      console.error(`[pinpoint] extension ${r.ids.join(", ")}`);
+      console.error(`[pinpoint] If the button still says "setup needed", quit and reopen the browser once.`);
+    }
     break;
   }
 

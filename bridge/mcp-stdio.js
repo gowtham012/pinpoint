@@ -15,9 +15,9 @@ export async function startStdio({ port = DEFAULT_PORT } = {}) {
   const up = async () => { try { await call("/health"); return true; } catch { return false; } };
 
   const api = {
-    touch(action, id, label) {
+    touch(action, id, label, who) {
       // fire and forget: presence must never slow a tool call down
-      fetch(`${base}/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, id, label }) }).catch(() => {});
+      fetch(`${base}/agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, id, label, who }) }).catch(() => {});
     },
     async db() {
       if (await up()) {
@@ -26,14 +26,15 @@ export async function startStdio({ port = DEFAULT_PORT } = {}) {
       }
       return load();
     },
-    async resolve(id, note) {
-      if (await up()) return (await call(`/annotations/${encodeURIComponent(id)}/resolve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note }) })).ok;
+    async resolve(id, note, by) {
+      if (await up()) return (await call(`/annotations/${encodeURIComponent(id)}/resolve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note, by }) })).ok;
       const db = load();
       const a = findAnnotation(db, id);
       if (!a) return false;
-      a.status = "resolved"; a.resolvedAt = new Date().toISOString(); if (note) a.resolution = note;
+      const first = a.status === "resolved" ? a.resolvedBy || "another agent" : null;
+      a.status = "resolved"; a.resolvedAt = new Date().toISOString(); if (note) a.resolution = note; if (by) a.resolvedBy = by;
       save(db);
-      return true;
+      return first ? "already" : true;
     },
     async clear() {
       if (await up()) return call("/annotations", { method: "DELETE" });

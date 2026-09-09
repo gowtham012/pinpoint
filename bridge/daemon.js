@@ -4,14 +4,21 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp.js";
 import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, summaryLine, findAnnotation, pageKeyOf } from "./store.js";
 
 const MAX_RESOLVED = Number(process.env.PINPOINT_MAX_RESOLVED) || 200;
+// Our own launch command, so the extension can tell you how to start us and the native host can
+// find us. process.argv[1] is wrong under the `bin` shim; this is the file that is actually here.
+const CLI_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "cli.js");
 
-export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOINT_PROJECT || null, print = false, quiet = false } = {}) {
+// `restartable` is off by default on purpose: POST /restart re-execs the process and exits it, and
+// a daemon embedded in someone else's process (the test suite) must never do that to its host.
+export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOINT_PROJECT || null, print = false, quiet = false, restartable = false } = {}) {
   let db = load();
   const events = new EventEmitter();
   events.setMaxListeners(1000);
@@ -20,8 +27,11 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
   // Monotonic version: the extension long-polls /events?since=<version> and re-syncs its pins
   // whenever this moves, so resolving from an agent clears pins without a page reload.
   let version = 1;
-  // Live presence: what the coding agent is doing right now, so the browser can show it.
-  let agent = { at: 0, action: null, id: null, label: null };
+  // Live presence: what each coding agent is doing right now, so the browser can show it. Keyed by
+  // agent name, because "agent to agent" means Claude Code and Cursor can both be connected and the
+  // single slot this used to be blended them into one confusing label.
+  const agents = new Map();
+  let agent = null;
   function bump() {
     version++;
     events.emit("version", version);
@@ -40,7 +50,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       // Keep the mirror out of git without making the user edit .gitignore.
       const ignore = path.join(dir, ".gitignore");
       if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, "*\n");
-      fs.writeFileSync(path.join(dir, "pending.md"), pendingMarkdown(db, { channel: "file", cliPath: process.argv[1] }));
+      fs.writeFileSync(path.join(dir, "pending.md"), pendingMarkdown(db, { channel: "file", cliPath: CLI_PATH }));
       const stripped = pending(db).map((a) => ({
         ...a,
         screenshot: a.screenshot ? { width: a.screenshot.width, height: a.screenshot.height, note: "not included in this file; read it over MCP (get_annotation) or from the bridge" } : null,
@@ -52,6 +62,11 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
   }
 
   const find = (id) => findAnnotation(db, id);
+
+  // One new annotation goes to exactly one waiter. `events.once("added")` woke every blocked
+  // wait_for_annotation with the SAME note, so two agents did the same work and the second
+  // resolve silently overwrote the first one's reply.
+  const taken = new Set();
 
   const api = {
     async db() { return db; },
@@ -87,22 +102,26 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       events.emit("screenshot", a);
       return true;
     },
-    async resolve(id, note) {
+    // Returns "already" rather than true when someone else got there first, so the second agent is
+    // told instead of quietly replacing the first one's reply.
+    async resolve(id, note, by) {
       const a = find(id);
       if (!a) return false;
+      const first = a.status === "resolved" ? a.resolvedBy || "another agent" : null;
       a.status = "resolved";
       a.resolvedAt = new Date().toISOString();
       if (note) a.resolution = note;
+      if (by) a.resolvedBy = by;
       persist();
       log(`resolved: #${a.number} ${a.comment}${note ? "  — " + note : ""}`);
-      return true;
+      return first ? "already" : true;
     },
     async remove(id) {
       const before = db.annotations.length;
       // Delete exactly the one resolved, by id. Filtering on the number would have removed that
       // number from every page at once now that numbering is per page.
       const gone = findAnnotation(db, id);
-      if (gone) db.annotations = db.annotations.filter((x) => x.id !== gone.id);
+      if (gone) { db.annotations = db.annotations.filter((x) => x.id !== gone.id); taken.delete(gone.id); }
       persist();
       if (gone) log(`removed: #${gone.number} ${gone.comment}`);
       return db.annotations.length < before;
@@ -110,14 +129,26 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     async clear() {
       const n = db.annotations.length;
       db = { nextNumber: 1, annotations: [] };
+      taken.clear();
       persist();
       log(`cleared ${n} annotation${n === 1 ? "" : "s"}`);
     },
     waitForNext(timeoutMs) {
       return new Promise((resolve) => {
         const t = setTimeout(() => { events.off("added", on); resolve(null); }, timeoutMs);
-        const on = (a) => { clearTimeout(t); resolve(a); };
-        events.once("added", on);
+        // Listeners run in registration order, so the first waiter claims the note and every other
+        // one stays blocked for the NEXT one. A null payload (a restart) releases everybody.
+        const on = (a) => {
+          if (a) {
+            if (taken.has(a.id)) return;
+            if (taken.size > 500) taken.clear(); // ponytail: ids only matter while a waiter is live
+            taken.add(a.id);
+          }
+          clearTimeout(t);
+          events.off("added", on);
+          resolve(a);
+        };
+        events.on("added", on);
       });
     },
     // Give a just-arrived annotation a moment for its screenshot to land before handing it to an agent.
@@ -136,7 +167,10 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       });
     },
     waitForVersion(since, timeoutMs) {
-      if (version > since) return Promise.resolve(version);
+      // `!==`, not `>`: after a restart our counter is back at 1 while the extension still asks
+      // since=57. A client from a previous life is answered at once — with `>` it ate the full
+      // 25s timeout on every poll until we climbed past its number, and pins looked frozen.
+      if (version !== since) return Promise.resolve(version);
       return new Promise((resolve) => {
         const t = setTimeout(() => { events.off("version", on); resolve(version); }, timeoutMs);
         const on = (v) => { clearTimeout(t); events.off("version", on); resolve(v); };
@@ -145,11 +179,15 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     },
     version: () => version,
     // Called by the MCP layer on every tool call, so the developer can see their agent working.
-    touch(action, id, label) {
-      agent = { at: Date.now(), action, id: id || null, label: label || null };
+    // `who` is {name, version} from the MCP initialize handshake, when the client sent one.
+    touch(action, id, label, who) {
+      const name = who?.name || null;
+      agent = { at: Date.now(), action, id: id || null, label: label || null, name, agentVersion: who?.version || null };
+      agents.set(name || "?", agent);
       bump();
     },
-    agent: () => (agent.at ? { ...agent, secondsAgo: Math.round((Date.now() - agent.at) / 1000) } : null),
+    agent: () => (agent ? { ...agent, secondsAgo: Math.round((Date.now() - agent.at) / 1000) } : null),
+    agents: () => [...agents.values()].map((a) => ({ ...a, secondsAgo: Math.round((Date.now() - a.at) / 1000) })),
   };
 
   function json(res, code, body) {
@@ -215,6 +253,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
         return json(res, 200, {
           service: "pinpoint-bridge", ok: true, version: 1, port, project,
           pending: pending(db).length, dataFile: DATA_FILE, storeVersion: version, agent: api.agent(),
+          agents: api.agents(), cliPath: CLI_PATH, restartable, pid: process.pid,
         });
       }
 
@@ -223,8 +262,16 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       if (p === "/agent" && req.method === "POST") {
         let b = {};
         try { b = (await readBody(req)) || {}; } catch {}
-        api.touch(b.action, b.id, b.label);
+        api.touch(b.action, b.id, b.label, b.who);
         return json(res, 200, { ok: true });
+      }
+
+      // Restart in place, so the browser can pick up a new build of the bridge without a terminal.
+      if (p === "/restart" && req.method === "POST") {
+        if (!restartable) return json(res, 501, { error: "this bridge was not started as its own process" });
+        json(res, 200, { ok: true, restarting: true, port });
+        setTimeout(restart, 50); // let the response flush before the socket goes
+        return;
       }
 
       if (p === "/events") {
@@ -266,7 +313,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
         if (req.method === "POST" && m[2] === "/resolve") {
           let body = {};
           try { body = (await readBody(req)) || {}; } catch {}
-          return json(res, 200, { ok: await api.resolve(id, body.note) });
+          return json(res, 200, { ok: await api.resolve(id, body.note, body.by) });
         }
           if (req.method === "POST" && m[2] === "/notified") {
           const a = find(id);
@@ -287,7 +334,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
 
       if (p === "/pending.md") {
         res.writeHead(200, { "content-type": "text/markdown", "access-control-allow-origin": "*" });
-        return res.end(pendingMarkdown(db, { channel: "file", cliPath: process.argv[1] }));
+        return res.end(pendingMarkdown(db, { channel: "file", cliPath: CLI_PATH }));
       }
 
       json(res, 404, { error: "not found" });
@@ -296,6 +343,18 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       if (!res.headersSent) json(res, 500, { error: String(e.message || e) });
     }
   });
+
+  function restart() {
+    bump();                        // release /events waiters with a normal 200
+    events.emit("added", null);    // release /annotations/wait the way a timeout does
+    server.closeAllConnections?.(); // without this, close() waits out every 25s long-poll
+    server.close(() => {
+      // Close BEFORE spawning or the replacement hits EADDRINUSE against us. stdio is inherited on
+      // purpose: started from a terminal, Ctrl-C must still work on the new one.
+      spawn(process.execPath, process.argv.slice(1), { stdio: "inherit", cwd: process.cwd() }).unref();
+      process.exit(0);
+    });
+  }
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);

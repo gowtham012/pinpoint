@@ -122,7 +122,7 @@
          you want to see what is already there. Like Stop, it takes its pointer events back. */
       .dock.armed .count { pointer-events: auto; }
       .dock.armed .label { display: none; }
-      .dock.armed .sep, .dock.armed .close { display: none; }
+      .dock.armed .sep, .dock.armed .close, .dock.armed .restart { display: none; }
       .dock.mini .count { padding: 0 8px; }
       .dock.armed { opacity: 1; border-color: var(--accent); }
       /* Every direct child sits on the same 24px optical row, with one horizontal rhythm.
@@ -169,8 +169,12 @@
       .dock .count b { color: var(--ink); font-weight: 600; }
       .dock .count.only-done b { color: var(--ink-dim); }
       .dock .sep { width: 1px; height: 14px; background: var(--line); margin: 0 4px; flex: none; align-self: center; }
-      .dock .close { color: var(--ink-dim); height: 24px; width: 24px; padding: 0; font-size: 14px;
+      .dock .close, .dock .restart { color: var(--ink-dim); height: 24px; width: 24px; padding: 0; font-size: 14px;
                      justify-content: center; }
+      /* Restarting is a rare, deliberate act, so it lives with the close button rather than in the
+         resting bar: it appears when the bar is expanded and is gone from the mini pill. */
+      .dock.mini .restart { display: none; }
+      .dock .restart.busy { opacity: .5; pointer-events: none; }
 
       /* ---------- region marquee: drag to take a whole area, not one element ---------- */
       .marquee {
@@ -320,6 +324,7 @@
       <span class="agent-say"></span>
       <span class="sep"></span>
       <button class="count"><b>0</b>&nbsp;<span class="cw">notes</span></button>
+      <button class="restart" title="Restart the bridge (picks up a new build)">&#8635;</button>
       <button class="close" title="Hide on this site">&times;</button>
     </div>
 
@@ -361,6 +366,7 @@
     dockCountN: shadow.querySelector(".dock .count b"),
     dockCountWord: shadow.querySelector(".dock .count .cw"),
     dockClose: shadow.querySelector(".dock .close"),
+    dockRestart: shadow.querySelector(".dock .restart"),
     pop: shadow.querySelector(".pop"),
     meta: shadow.querySelector(".pop .meta"),
     scope: shadow.querySelector(".pop .scope"),
@@ -706,19 +712,22 @@
     if (a) agentTimer = setTimeout(paintAgent, 26000);
     // a resolve is worth calling out, and worth flashing the pin it belongs to
     if (a && a.action === "resolve" && a.at !== known) {
-      toast(`Your agent finished ${a.label ? a.label.replace(/^done with /, "") : "a note"}`);
+      toast(`${agentName(a)} finished ${a.label ? a.label.replace(/^done with /, "") : "a note"}`);
     }
     if (a && a.id && a.action === "look") {
       const p = pins.find((x) => x.id === a.id);
       if (p) { p.node.classList.add("watched"); setTimeout(() => p.node.classList.remove("watched"), 2600); }
     }
   }
+  // Agents identify themselves in the MCP handshake ("claude-code", "cursor-vscode", "codex"…).
+  // Naming the one that is actually working is the whole point of connecting more than one.
+  const agentName = (a) => a?.name || "Your coding agent";
   function paintAgent() {
     if (!isTop) return;
     const live = !!agentState && (agentState.secondsAgo ?? 999) < 25 && Date.now() - agentState.seenAt < 26000;
     ui.dock.classList.toggle("agent-live", live);
-    ui.agentSay.textContent = live ? (agentState.label || "working") : "";
-    ui.who.title = live ? `Your coding agent is ${agentState.label || "working"}` : "You";
+    ui.agentSay.textContent = live ? `${agentState.name ? agentState.name + " · " : ""}${agentState.label || "working"}` : "";
+    ui.who.title = live ? `${agentName(agentState)} is ${agentState.label || "working"}` : "You";
     if (live) { clearTimeout(miniTimer); ui.dock.classList.remove("mini"); }
   }
 
@@ -773,6 +782,16 @@
   ui.dockToggle.addEventListener("click", (e) => { e.stopPropagation(); togglePicking(); });
   ui.dockStop.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); stopPicking(); });
   ui.dockCount.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(); });
+  ui.dockRestart.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    ui.dockRestart.classList.add("busy");
+    toast("Restarting the bridge…", 6000);
+    const r = await chrome.runtime.sendMessage({ type: "restartBridge" }).catch(() => null);
+    ui.dockRestart.classList.remove("busy");
+    toast(r?.ok ? "Bridge restarted" : "The bridge did not come back — start it in a terminal");
+    refreshDock();
+    loadPins();
+  });
   ui.dockClose.addEventListener("click", async (e) => {
     e.stopPropagation();
     dockHidden = true;
@@ -825,7 +844,9 @@
     if (!replies.length) return;
     const head = document.createElement("li");
     head.className = "group";
-    head.textContent = `Done by your agent (${replies.length})`;
+    // Name who actually did it when they all agree; otherwise the per-item labels below say it.
+    const names = [...new Set(replies.map((a) => a.resolvedBy).filter(Boolean))];
+    head.textContent = names.length === 1 ? `Done by ${names[0]} (${replies.length})` : `Done by your agent (${replies.length})`;
     ui.panelList.appendChild(head);
 
     for (const a of replies) {
@@ -834,7 +855,7 @@
       li.innerHTML = `<span class="n"></span><div class="body"><div class="c"></div><div class="reply"><span class="who"></span><span class="what"></span></div></div>`;
       li.querySelector(".n").textContent = a.number;
       li.querySelector(".c").textContent = a.comment;
-      li.querySelector(".who").textContent = "agent";
+      li.querySelector(".who").textContent = a.resolvedBy || "agent";
       const what = li.querySelector(".what");
       if (a.resolution) what.textContent = a.resolution;
       else {

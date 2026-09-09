@@ -44,6 +44,7 @@ The toolbar icon's dot turns green once it can see the bridge.
 # 4. teach Claude Code about Pinpoint (once), from pinpoint/bridge
 claude mcp add pinpoint -s user -- node "$PWD/cli.js" mcp
 node cli.js install-hooks ~/code/my-app     # so annotations arrive without being asked
+node cli.js install-native-host             # so the popup's "Start bridge" button works
 ```
 
 **5. Restart Claude Code once.** Hooks are only read when a session starts.
@@ -142,6 +143,26 @@ Then just talk to Claude Code normally. With hooks installed you don't have to m
 
 If the bridge isn't running, **Send** copies a ready-to-paste prompt to your clipboard instead, so nothing is lost.
 
+### Starting and restarting it from the browser
+
+The bridge is a process, and a browser cannot start one — so `install-native-host` registers a tiny
+launcher with Chrome (and Brave, Edge, Arc, Chromium, Vivaldi, Opera). After that the popup's
+**Start bridge** button works, and while the bridge is running that button and the **↻** in the
+on-page bar restart it — which is what you want after pulling a new build, without leaving the page.
+
+The launcher can do exactly one thing: run this repo's own `cli.js` on a port number. The port is
+read from the popup's setting, never from the page, and no path, command or project directory can
+cross that boundary. Restart is plain HTTP to the bridge itself, so it needs no launcher and works
+in Safari too. macOS and Linux only for now; on Windows, start the bridge in a terminal.
+
+### Which agent did what
+
+Agents introduce themselves in the MCP handshake, so when more than one is connected the bar names
+the one that is working (`claude-code`, `cursor-vscode`, `codex`) instead of saying "your agent",
+and each reply in the panel is attributed to whoever wrote it. `wait_for_annotation` hands each new
+note to exactly **one** waiting agent, so two agents watching at once share the queue rather than
+both doing the same note — and if one resolves something another already finished, it is told so.
+
 ## How your agent finds out
 
 Three mechanisms, strongest first. They stack — using all three is fine.
@@ -188,6 +209,8 @@ node cli.js print              pending annotations as markdown  (--consume also 
 node cli.js resolve <id...> --note "what you changed"
                                mark done — the pin disappears and your note is shown as the reply
 node cli.js install-hooks [dir]  wire up Claude Code
+node cli.js install-native-host   let the popup's "Start bridge" button start the bridge
+                               (--uninstall removes it; --id <id> allows a second checkout)
 node cli.js clear              delete everything
 node cli.js --help
 
@@ -255,6 +278,15 @@ styles are all still there.
 after `install-hooks`. Check that `<your repo>/.claude/settings.json` has two entries containing
 `print --hook`, and that the path in them still exists (moving your Pinpoint clone breaks it —
 re-run `install-hooks`). You can always just say *"apply my pinpoint annotations"*.
+
+**"Start bridge" says one-time setup is needed.** Run `node cli.js install-native-host` once, then
+press it again. If you have already run it, run it again — moving the repo, or reloading a build
+without the manifest `key`, changes the extension's id, and Chrome reports a rejected id the same
+way as a missing launcher. Quit and reopen the browser once afterwards.
+
+**The button says the launcher couldn't find Node.** The launcher bakes in an absolute path to
+node, because a browser-started process does not get your shell's `PATH`. If node moved (a new nvm
+version, a Homebrew upgrade), re-run `install-native-host`.
 
 **Nothing works and you want a clean slate.** `node cli.js clear` empties the store;
 `~/.pinpoint/annotations.json` is the only state outside your repo.

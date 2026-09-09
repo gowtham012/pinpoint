@@ -63,10 +63,10 @@
   .hero h1 { font-size: 54px; line-height: 1.05; letter-spacing: -.03em; margin: 18px 0 16px; max-width: 16ch; }
   .hero p { font-size: 18px; line-height: 1.6; color: var(--ink-2); max-width: 54ch; margin: 0 0 28px; }
   .hero .cta { display: flex; gap: 12px; align-items: center; }
-  /* The hero's primary call to action carries more weight than a nav button, so it is sized up
-     rather than inheriting the default .btn scale. Only the primary grows: the pair stays centred,
-     and the size difference is what marks one of them as the main action. */
-  .hero .cta .btn.primary { padding: 14px 26px; font-size: 16px; border-radius: 10px; }
+  /* Both hero calls to action share one size. Sizing up only the primary left the pair visibly
+     mismatched in height, which reads as a mistake rather than as hierarchy — colour and weight
+     already say which one is primary, so they do not need different geometry to say it again. */
+  .hero .cta .btn { padding: 14px 26px; font-size: 16px; border-radius: 10px; }
 
   /* stats */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin: 56px 0; }
