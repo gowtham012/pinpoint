@@ -1,37 +1,78 @@
-# Chrome Web Store — publishing checklist
+# Chrome Web Store — publisher checklist (Pinpoint MV3)
 
-The listing is the single biggest thing standing between Pinpoint and the developers who would use
-it: "Load unpacked + Developer mode" loses most people before they ever start the bridge. This is the
-path from this repository to an approved item.
+Practical path to list the open-source Pinpoint extension. No product code changes required for this doc.
 
-**The honest residual, first:** the Store distributes the *extension* only. The bridge is still a Node
-process on `127.0.0.1` that the developer starts themselves (`node bridge/cli.js setup`). Approval
-does not change that, and the listing should not imply otherwise. Until it is approved, Load unpacked
-stays the documented install.
+Repo: https://github.com/gowtham012/pinpoint · Extension root: `extension/` · Manifest: MV3, version currently in `extension/manifest.json` (e.g. `0.4.0`).
+
+---
+
+## Why CWS matters for growth
+
+- **Discoverability** — “Chrome extension for Claude / Cursor UI” searches land on Store results before random GitHub READMEs.
+- **Trust** — “Add to Chrome” beats Load unpacked for many developers who will still run your local bridge.
+- **Shareable URL** — PH, Show HN, Twitter, and Reddit can link a Store page without teaching `chrome://extensions` first.
+- **Honest residual:** CWS only distributes the extension. The **bridge is still a local Node process** on `127.0.0.1` (default port 7331). Store approval does not replace `npm install` / `node cli.js`.
+
+Until the listing is approved, keep documenting **Load unpacked → `extension/`** as the supported install path (it already is in the README).
+
+---
 
 ## Packaging
 
-1. Bump `version` in `extension/manifest.json`. The Store rejects a version it has already seen.
-2. Zip the contents of `extension/` — reviewers expect `manifest.json` at the zip root. Nothing from
-   `bridge/`, `node_modules/`, `.git/` or the test fixtures belongs in it.
+1. Bump `version` in `extension/manifest.json` when you ship a Store build (semver; CWS rejects reuse of the same version).
+2. Zip **only** the `extension/` folder contents (or the folder itself consistently — reviewers open `manifest.json` at the zip root). Do **not** include `bridge/`, `node_modules/`, `.git/`, or test fixtures.
    ```bash
    cd extension && zip -r ../pinpoint-extension-cws.zip . -x '*.DS_Store'
    ```
-3. **Keep the manifest `key`.** The extension id is derived from it, and native messaging whitelists
-   that exact id — strip it and every existing install's "Start bridge" button breaks.
-4. Smoke-test the zip itself: unpack it somewhere else, Load unpacked from there, green toolbar dot
-   with the bridge running, then mark an element on `demo/index.html`.
+3. Keep the committed `key` in the manifest if you rely on a stable extension id for native messaging / re-installs; do not strip it casually between builds.
+4. Smoke-test the zip: unpack elsewhere → Load unpacked → green toolbar dot with bridge running → pick element on `http://localhost:8080` (`demo/`).
 
-## Privacy policy
+---
 
-[PRIVACY.md](../PRIVACY.md) is the policy; the Store needs a URL, so link to it on GitHub (or publish
-it through Pages). It is written to match what the code actually does — local-only, no telemetry, the
-`<all_urls>`/`captureVisibleTab` story, and the one honest caveat that annotations are handed to the
-coding agent you connect. Do not claim "nothing ever leaves your machine" without that caveat.
+## Privacy policy (required URL)
+
+There is **no** `PRIVACY.md` in the repo today — publish one (GitHub Pages, or `docs/privacy.md` / `PRIVACY.md` linked from the listing) before submit.
+
+Verified against the public design / README / manifest (OSS, local-only):
+
+| Claim | Basis |
+|-------|--------|
+| Local-only processing | Bridge binds `127.0.0.1`; annotations under `~/.pinpoint` (or `$PINPOINT_HOME`) |
+| No Pinpoint cloud / no first-party telemetry in OSS path | No analytics host in manifest; no SaaS backend in README architecture |
+| Screenshots stay local | Cropped PNG stored base64 in local annotations store; not uploaded by the extension |
+| 127.0.0.1 bridge | Extension POSTs to local bridge; MCP/hooks deliver to agents **you** configure |
+| Automatic injection limited | Content scripts match localhost / 127.0.0.1 / `.local` / `.test` / `file://`; other sites need popup opt-in |
+
+**Outline to publish:**
+
+1. Overview — developer tool; annotation data processed on your machine.
+2. Data the extension handles on your action — page URL/title/viewport, element metadata (selector, DOM path, attributes, styles, component hints), your typed comment, optional cropped screenshot.
+3. Where it goes — local bridge (`127.0.0.1`, default 7331); disk under `~/.pinpoint` / optional project `.pinpoint/`. No Pinpoint servers in the OSS design.
+4. Third parties — only coding agents / MCP clients **you** connect (Claude Code, Cursor, Codex, etc.); their policies apply after you send data through them.
+5. Permissions — `tabs` / `captureVisibleTab` (via host permission), `scripting`, `storage`, `activeTab`, `alarms`, `nativeMessaging` as declared.
+6. Children — not directed at children.
+7. Contact — GitHub issues: https://github.com/gowtham012/pinpoint/issues
+8. Changes — dated policy; same URL for updates.
+
+Do **not** claim “zero data ever leaves the machine” without the agent caveat — MCP/hooks intentionally hand context to the agent.
+
+---
+
+## Host permission justification (`<all_urls>` / `captureVisibleTab`)
+
+Matches the README safety section — use the same story in the Store questionnaire and reviewer notes:
+
+- Chrome requires a broad host permission for `tabs.captureVisibleTab` so Pinpoint can crop a screenshot of the marked element.
+- A narrower host permission does **not** grant that capture API.
+- Automatic content-script injection is still limited to local development URL patterns in the manifest; non-local tabs require explicit opt-in from the toolbar popup.
+- Single purpose: UI annotation for local development → coding agents — not general browsing automation or scraping.
+
+---
 
 ## Listing copy
 
-**Name:** Pinpoint — UI annotations for coding agents
+**Name:** Pinpoint — UI annotations for coding agents  
+(Manifest name is longer; Store name can be shorter and clearer.)
 
 **Short description** (≤132 characters):
 
@@ -39,76 +80,105 @@ coding agent you connect. Do not claim "nothing ever leaves your machine" withou
 Click elements on localhost; send selector, styles, and a cropped screenshot to Claude Code, Cursor, or Codex via a local bridge.
 ```
 
-**Detailed description:**
+**Detailed description** (paste-ready):
 
 ```
 Pinpoint helps you brief coding agents about UI changes without describing "the third button on the left."
 
 HOW IT WORKS
-1. Run the local Pinpoint bridge on your machine (127.0.0.1) — `git clone`, then `node pinpoint/bridge/cli.js setup`, which asks the rest.
+1. Run the local Pinpoint bridge on your machine (127.0.0.1).
 2. Open your local dev site (localhost, 127.0.0.1, .local / .test, or file:// with file access enabled).
 3. Click the Pinpoint bar (or press Alt+Shift+A), click an element or drag a region, and write what should change.
-4. Your agent receives the CSS selector, DOM path, computed styles, React/Vue component chain, source-file hint, and a cropped screenshot over MCP — or via a pending markdown file, or a copied prompt.
+4. Your agent receives the CSS selector, DOM path, computed styles, React/Vue component chain, source-file hint, and a cropped screenshot over MCP — or via a pending markdown file / copied prompt.
 
 WHO IT'S FOR
 Developers using Claude Code, Cursor, Codex, or any MCP client while building web UIs locally.
 
 WHAT IT IS NOT
-Pinpoint does not drive or automate the browser. You point; the coding agent edits. It is not a scraper, and it does not annotate production websites by default.
+Pinpoint does not drive or automate the browser. You point; the coding agent edits. It is not a general web scraper and it does not annotate arbitrary production websites by default.
 
 LOCAL-ONLY
-The bridge listens on 127.0.0.1 only, and refuses any request carrying a web page's origin. Page content stays on your machine unless you hand it to an agent yourself. The extension appears on local development pages; any other tab requires explicit opt-in from the popup.
+The bridge listens on 127.0.0.1 only. Page content stays on your machine. The extension shows its UI on local development pages; other tabs require explicit opt-in from the popup.
 
 SETUP
-This extension expects the open-source Pinpoint bridge (Node 18+): https://github.com/gowtham012/pinpoint
+This extension expects the open-source Pinpoint bridge (Node 18+). See the project README:
+https://github.com/gowtham012/pinpoint
 
 PERMISSIONS (WHY)
-• Tab capture — to crop a screenshot of the element you marked.
-• Host access — required by Chrome for tab capture; automatic injection is still limited to local development hosts.
-• Native messaging (optional) — so the popup can start the local bridge after a one-time host install.
+• Access to tabs / captureVisibleTab — to crop a screenshot of the element you marked.
+• Host access — required by Chrome for tab capture; Pinpoint still limits automatic injection to local development hosts.
+• Native messaging (optional) — so the popup can start/restart the local bridge after one-time host install.
 
 Open source (MIT).
 ```
 
 **Category:** Developer Tools · **Language:** English
 
-## Screenshots
+---
 
-1280×800, from assets already in the repo — no mockups, no stock AI art.
+## Screenshot / promo tile shot list (use existing `docs/images`)
 
-| # | Asset | Must show |
-|---|---|---|
-| 1 | `docs/images/bar-idle.png` | The bar at rest, with a `localhost` URL visible |
-| 2 | `docs/images/bar-armed.png` | Picking: the outline, the component name, **Stop** |
-| 3 | `docs/images/popover.png` | A typed instruction against the element it picked |
-| 4 | `docs/images/pin.png` | A numbered pin on a real page |
-| 5 | `docs/images/agent-reply.png` | The notes panel with the agent's reply underneath |
-| 6 | optional | Extension → `127.0.0.1:7331` → MCP agents, drawn flat |
+Prefer 1280×800 (or current CWS required sizes). Source assets already in-repo:
 
-Promo tile: *"Click the element. Your coding agent gets the context."* over local dev UI.
-`docs/demo.mp4` works as the promo video if it fits the size limit.
+| # | Asset | Must show | Avoid |
+|---|--------|-----------|-------|
+| 1 | `docs/images/bar-idle.png` | Bar idle; localhost URL visible if possible | Random production sites |
+| 2 | `docs/images/bar-armed.png` | Picking / outline / Stop | Tiny unreadable UI |
+| 3 | `docs/images/popover.png` | Typed instruction + element name | Fake “AI magic” marketing |
+| 4 | `docs/images/pin.png` | Numbered pin on element | Cluttered collage |
+| 5 | `docs/images/agent-reply.png` | Notes panel + agent reply | Claiming cloud sync |
+| 6 | Optional architecture still | Extension → `127.0.0.1:7331` → MCP | Implying SaaS hosting |
 
-## Single purpose, and the questions reviewers will ask
+**Promo tile / marquee:** “Click the element. Your coding agent gets the context.” + localhost UI. Also usable: `docs/demo.gif` / `docs/demo.mp4` for a short promo video if size limits allow.
 
-| What looks risky | What is true, and how to say it |
-|---|---|
-| `<all_urls>` on a small tool | It exists solely for `tabs.captureVisibleTab`; no narrower permission grants that API. Automatic injection is limited to local-development matches in the manifest. |
-| Looks like a general web annotator | Single purpose: annotating **local development** UI for coding agents. Other sites need an explicit per-tab opt-in. |
-| Native messaging | The launcher runs exactly one thing — this repository's `cli.js` — on a port from the popup's own setting. No downloaded code, no shell. |
-| Confusion with browser-driving agents | "Does not drive or automate the browser" belongs in the description, not just the reply. |
+---
 
-Reviewer note worth pasting into the submission: *Pinpoint is a developer tool. The host permission
-exists solely for `captureVisibleTab`, which crops a screenshot of an element the developer clicked.
-Content scripts auto-match local development hosts only; anything else is opt-in per tab. The
-companion Node bridge is open source and binds to loopback.*
+## Single-purpose policy — risks & phrasing
 
-## Submitting
+| Risk | How to phrase / mitigate |
+|------|---------------------------|
+| Looks like a general-purpose annotator for the whole web | Emphasize **local dev** + coding agents; “not a scraper”; production sites need explicit opt-in |
+| Broad `<all_urls>` looks suspicious | Tie exclusively to **screenshot capture**; injection matches are local |
+| Native messaging / “Start bridge” | State it only launches **this repo’s** `cli.js`; no remote code download |
+| Confusion with Playwright / browser agents | Explicit “does not drive or automate the browser” |
+| Over-claiming Store-only features | Same OSS bridge; CWS is distribution + discovery |
 
-1. Chrome Web Store Developer account (one-time $5 fee).
-2. Privacy policy URL — [PRIVACY.md](../PRIVACY.md) on GitHub is enough.
-3. Build the zip, upload it as a **New item**.
-4. Listing copy, category, language; screenshots and promo tile.
-5. Permission justifications — the `captureVisibleTab` story above, verbatim.
-6. Single purpose statement, then submit. Review lag is normal; nothing in the repo should wait on it.
-7. After approval: put the Store link in the README's first screen, and keep the Store version in step
-   with the tags here.
+Reviewer note (optional paste into submission): *Pinpoint is a developer tool. Host permission exists solely for captureVisibleTab. Content scripts auto-match local development hosts only. The companion Node bridge is open source and loopback-only.*
+
+---
+
+## Step-by-step submit flow
+
+1. Create a [Chrome Web Store Developer](https://chrome.google.com/webstore/devconsole) account (one-time fee).
+2. Publish privacy policy URL (see above).
+3. Build `pinpoint-extension-cws.zip` from `extension/`.
+4. Dev Console → **New item** → upload zip.
+5. Fill store listing (name, short + detailed description, category, language).
+6. Upload screenshots + promo tile; optional promo video from `docs/demo.mp4`.
+7. Answer permission justifications (`host_permissions`, `tabs`, `nativeMessaging`, etc.) with the captureVisibleTab / local-dev story.
+8. Single purpose: UI annotation for local development → coding agents.
+9. Submit for review. Expect lag; do not block GitHub Load-unpacked docs on approval.
+10. After approval: add the Store URL to README / launch posts; keep version bumps in sync with GitHub tags.
+
+---
+
+## What stays “Load unpacked” until approval
+
+- Primary install instructions in README / [quick-install.md](./quick-install.md).
+- CI and contributors developing against unpacked `extension/`.
+- Anyone who needs a build newer than the last approved Store version.
+
+After approval, dual-path is fine: **Store for discovery**, **Load unpacked / git** for bleeding edge.
+
+---
+
+## Honest residual
+
+The Chrome Web Store item is only the extension. Pinpoint still requires:
+
+- Node 18+ bridge (`pinpoint/bridge`, `node cli.js`)
+- Loopback HTTP on `127.0.0.1` (default 7331)
+- Optional MCP registration for Claude Code / Cursor / Codex
+- Optional `install-native-host` so the popup can start the bridge
+
+CWS does not host or replace that local Node process.
