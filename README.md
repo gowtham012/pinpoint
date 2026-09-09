@@ -123,8 +123,6 @@ The popover names exactly what you picked, so you can tell two near-identical bu
 
 Some changes are about a group, not a control — *"make these cards two-up on mobile"*. **Drag** instead of clicking and you get a box.
 
-![Dragging a region across a group of checkboxes](docs/images/region.png)
-
 A box has no element of its own, so it is anchored to the **deepest element that fully contains it**. That is what lets a region pin survive a re-render exactly as an element pin does, and it means your agent gets a real container to change — plus the list of what the box contained, and a screenshot cropped to the box — rather than four coordinates.
 
 ### Seeing what your agent did
