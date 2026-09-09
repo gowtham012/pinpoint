@@ -57,6 +57,40 @@ node cli.js install-hooks ~/code/my-app     # so annotations arrive without bein
 In a hurry? `bash setup.sh ~/code/my-app` from the repo root does steps 1, 2 and 4 in one go
 (macOS; it also opens `chrome://extensions` for step 3).
 
+## Which browsers
+
+**Chromium browsers work** — Chrome, Edge, Brave, Arc, Opera, Vivaldi. They share the extension
+APIs this uses (MV3 with a `service_worker` background, promise-style `chrome.*`, `scripting`,
+`captureVisibleTab`), so "Load unpacked" is the same everywhere; only the menu it lives under
+differs. The test suite drives headless Chromium, so that is the one continuously verified.
+
+**Firefox still will not load it**, though it is closer than it was. The namespace problem is gone
+— every script now prefers `browser` where it exists, so the promise-style calls would work — and
+`chrome.extension.isAllowedFileSchemeAccess` is probed rather than assumed. Two manifest blockers
+remain:
+
+- the manifest declares `background: { service_worker }`; Firefox MV3 wants `background: { scripts }`
+- Firefox requires `browser_specific_settings.gecko.id`, which is absent
+
+Both are fixable in the manifest, but keeping them honest needs a Firefox job in CI rather than a
+claim in a README. Open an issue if you want it.
+
+**Safari works, but it has to be built rather than loaded.** Safari does not take unpacked
+extensions; the extension is wrapped in a small macOS app. One command does the whole thing:
+
+```bash
+bash tools/make-safari.sh          # needs Xcode, not just the command line tools
+```
+
+It converts, builds, and prints the path plus the four Safari settings to flip (the important one
+is **Develop ▸ Allow Unsigned Extensions**, which resets every time Safari quits). Verified here:
+the project converts and `xcodebuild` reports **BUILD SUCCEEDED**.
+
+One capability is missing on Safari: `"world": "MAIN"` content scripts are not supported, so
+`inspector.js` cannot read React fibers or Vue instances. That costs you the **component chain and
+source-file hint** — Pinpoint already handles a page with no framework metadata and tells the agent
+so, and the rest (picking, regions, comments, pins, screenshots, the bridge, MCP) is unchanged.
+
 ## Where it runs
 
 Pinpoint is a tool for the app you are building, so it only loads itself on local development pages. It appears **on its own** on `localhost`, `127.0.0.1`, and `.local` / `.test` / `.localhost` hosts — plus `file://` pages, once you have granted file access (see the Quick start). On any other site it is simply not there — no bar, no overlay, nothing injected.
@@ -151,7 +185,8 @@ node cli.js [start]            start the bridge (default command)
 node cli.js mcp                run as a stdio MCP server
 node cli.js status             is it running? how many pending?
 node cli.js print              pending annotations as markdown  (--consume also resolves them)
-node cli.js resolve <id...>    mark done — the pin disappears in the browser
+node cli.js resolve <id...> --note "what you changed"
+                               mark done — the pin disappears and your note is shown as the reply
 node cli.js install-hooks [dir]  wire up Claude Code
 node cli.js clear              delete everything
 node cli.js --help
@@ -241,7 +276,7 @@ cd demo && python3 -m http.server 8080     # then open http://localhost:8080
 cd test && npm install && npx playwright install chromium && npm test
 ```
 
-82 tests. `bridge.test.mjs` (33) runs its own daemon on a scratch port with a temp `PINPOINT_HOME`: validation, filters, the live-event channel, deferred screenshot attachment, the project mirror, loopback/origin guards, persistence across restarts, pruning, every CLI subcommand, hook installation, and every MCP tool over both stdio and Streamable HTTP. `e2e.test.mjs` (49) loads the unpacked extension into headless Chromium and drives real pages: React, Vue, plain HTML with shadow DOM and an iframe, a `default-src 'none'` CSP page, a 3,600-node stress page where every generated selector must resolve back to its own element, DPR 2, cross-tab sync, live resolve, navigating mid-send, switching tabs mid-send, the popup, the on-page bar and its notes list, sticky comment mode, the offline fallback, refusing to load on non-local sites, live agent presence, and a multi-step form that rebuilds its whole DOM with `innerHTML` (where pins must follow their own element or disappear, never silently re-bind to a stranger).
+87 tests. `bridge.test.mjs` (34) runs its own daemon on a scratch port with a temp `PINPOINT_HOME`: validation, filters, the live-event channel, deferred screenshot attachment, the project mirror, loopback/origin guards, persistence across restarts, pruning, every CLI subcommand, hook installation, and every MCP tool over both stdio and Streamable HTTP. `e2e.test.mjs` (53) loads the unpacked extension into headless Chromium and drives real pages: React, Vue, plain HTML with shadow DOM and an iframe, a `default-src 'none'` CSP page, a 3,600-node stress page where every generated selector must resolve back to its own element, DPR 2, cross-tab sync, live resolve, navigating mid-send, switching tabs mid-send, the popup, the on-page bar and its notes list, sticky comment mode, the offline fallback, refusing to load on non-local sites, live agent presence, and a multi-step form that rebuilds its whole DOM with `innerHTML` (where pins must follow their own element or disappear, never silently re-bind to a stranger).
 
 ## Notes on safety and storage
 
@@ -251,13 +286,15 @@ The bridge binds to `127.0.0.1` only, identifies itself with a `service` marker 
 
 Everything scraped from the page (text, HTML, attributes) is explicitly labelled as untrusted data in what the agent receives; only your typed comment is presented as an instruction.
 
-Screenshots are stored base64-encoded inside `~/.pinpoint/annotations.json` rather than as loose image files, and resolved annotations are pruned past 200 (`PINPOINT_MAX_RESOLVED`). The picture is taken by the extension's worker just after your comment is stored, so hitting Send and immediately switching to your editor keeps both; if the page genuinely changed first, the annotation records *why* there is no screenshot instead of attaching one of the wrong page.
+Screenshots are stored base64-encoded inside `~/.pinpoint/annotations.json` rather than as loose image files, and resolved annotations are pruned past 200 (`PINPOINT_MAX_RESOLVED`). The picture is taken by the extension's worker just after your comment is stored, so hitting Send and immediately switching to your editor keeps both. Because it is taken a moment later, the crop is recorded in **document** coordinates and re-derived against the page's real scroll position at capture time: scroll a little and you still get the right crop, scroll away and the annotation records *why* there is no screenshot rather than attaching a confident picture of somewhere else. The same check catches a navigation mid-capture.
 
 ## Roadmap
 
 - Mobile: same bridge, picker as an overlay in an Expo dev client or Capacitor webview over LAN.
 - CSS source mapping via `chrome.debugger` (which rule set this colour, and where).
-- Region and page-level annotations; replies from the agent shown on the pin.
+- Page-level annotations — a note about the whole page rather than an element or an area.
+- Firefox: the manifest needs a `scripts` background and a `gecko.id` (see *Which browsers*).
+- Agent replies on the pin itself, not only in the notes panel.
 
 ## Contributing
 

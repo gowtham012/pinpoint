@@ -1,3 +1,7 @@
+// Safari and Firefox expose the promise-based extension API as `browser`; Chrome only has
+// `chrome`. Prefer `browser` where it exists so every `await chrome.…` below works on all three.
+const chrome = globalThis.browser ?? globalThis.chrome;
+
 const $ = (s) => document.querySelector(s);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
