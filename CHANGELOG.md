@@ -90,6 +90,16 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
 - The popup honours `prefers-color-scheme`; it was a white flash in a dark browser.
 
 ### Added
+- **Safari support.** `tools/make-safari.sh` converts the extension with Apple's
+  `safari-web-extension-converter` and builds it — verified end to end here, `BUILD SUCCEEDED`.
+  The script bakes in the argument that otherwise wastes an afternoon: the converter derives the
+  app id from the last component of `--bundle-identifier`, so if that component does not match the
+  app name the extension's id is not a prefix of the app's and Xcode refuses to embed it.
+  Safari does not support `"world": "MAIN"` content scripts, so the React/Vue component chain and
+  source-file hint are unavailable there; everything else behaves the same.
+- Cross-browser namespace shim: Safari and Firefox expose the promise API as `browser`, Chrome as
+  `chrome`. Each script now prefers whichever exists, so the ~30 `await chrome.…` calls work on all
+  three. `chrome.extension.isAllowedFileSchemeAccess` is Chrome-only and is probed before use.
 - **You can see what your agent did.** A finished note used to disappear, leaving you with a
   vanished pin and no idea what changed. It now stays in the notes panel with the agent's reply
   underneath it. That reply is the `note` on `resolve_annotation`, which was optional and so was

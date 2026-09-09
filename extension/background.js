@@ -3,6 +3,10 @@
 // bridge, keep the toolbar badge in sync, and long-poll the bridge for changes so pins added or
 // resolved anywhere show up in every open tab without a reload.
 
+// Safari and Firefox expose the promise-based extension API as `browser`; Chrome only has
+// `chrome`. Prefer `browser` where it exists so every `await chrome.…` below works on all three.
+const chrome = globalThis.browser ?? globalThis.chrome;
+
 const DEFAULT_PORT = 7331;
 const WATCH_ALARM = "pinpoint-watch";
 
@@ -32,7 +36,10 @@ async function whyNot(url) {
   }
   // Chrome keeps file:// access off per-extension, and off is the default. Without it we are never
   // injected into a file:// page at all — so name the switch instead of claiming the page is fine.
-  if (url.startsWith("file:") && !(await chrome.extension.isAllowedFileSchemeAccess())) {
+  // chrome.extension.isAllowedFileSchemeAccess is Chrome-only — Safari has no chrome.extension
+  // and Firefox no equivalent, so ask only where the question can be answered.
+  const fileAccess = chrome.extension?.isAllowedFileSchemeAccess;
+  if (url.startsWith("file:") && fileAccess && !(await fileAccess.call(chrome.extension))) {
     return 'Turn on "Allow access to file URLs" for Pinpoint on chrome://extensions, then reload this page.';
   }
   return "Pinpoint runs on local development pages — localhost, 127.0.0.1, a .local/.test host, or a file:// page.";
