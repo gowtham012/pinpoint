@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Fixed
+- **The agent's replies were unreachable, so a finished note looked deleted.** The bar's counter is
+  the only way into the notes panel, and it hid itself whenever nothing was pending — so the moment
+  an agent finished the last note, the reply it had just written could never be opened. The counter
+  now stays while there is anything to read and says "1 done" rather than "1 note" when nothing is
+  outstanding.
+- **The counter was inert while picking.** The whole bar is click-through so it can never block the
+  element you are aiming at, and only Stop was exempt — but checking what you have already marked
+  is exactly a mid-picking act. It takes clicks now, like Stop.
 - **A screenshot could show a different part of the page, with nothing saying so.** The crop was
   measured in viewport coordinates when Send was pressed but taken moments later by the worker, so
   scrolling in between left those coordinates pointing at whatever had moved into that spot — and
