@@ -10,9 +10,9 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
 ```
 
-<video src="https://github.com/gowtham012/pinpoint/raw/main/docs/demo.mp4" controls muted playsinline width="900"></video>
+![Pinpoint on a local dev page: picking an element, writing what should change, and the agent picking it up](docs/demo.gif)
 
-*Pinpoint on a local dev page: click an element, say what should change, the agent gets it.* ([watch the demo](https://github.com/gowtham012/pinpoint/raw/main/docs/demo.mp4))
+*Click an element, say what should change, your agent gets it. ([full-speed video](docs/demo.mp4))*
 
 ## Quick start
 
