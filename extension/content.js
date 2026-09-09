@@ -36,6 +36,10 @@
         --line: rgba(0,0,0,.09);
         --shadow: 0 1px 2px rgba(16,16,24,.06), 0 10px 30px rgba(16,16,24,.16);
         --radius: 12px;
+        /* The logo as drawn — written by tools/make-icons.sh from tools/logo/mark.png. Painted
+           as-is rather than masked to the accent colour: this is the mark, not a tinted stand-in.
+           It only needs to invert on the violet pill while armed. */
+        --mark-src: url("data:image/png;base64,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");
         --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
         --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         all: initial;
@@ -134,8 +138,8 @@
       .dock .toggle { font-weight: 600; }
       .dock.armed .toggle { background: var(--accent); color: var(--accent-ink); }
       .dock.armed .toggle:hover { background: var(--accent); }
-      .mark { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); flex: none; }
-      .dock.armed .mark { background: var(--accent-ink); box-shadow: 0 0 0 3px rgba(255,255,255,.35); animation: pulse 1.6s ease-in-out infinite; }
+      .mark { width: 15px; height: 15px; flex: none; background: var(--mark-src) center / contain no-repeat; }
+      .dock.armed .mark { filter: brightness(0) invert(1); animation: pulse 1.6s ease-in-out infinite; }
       @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
       .dock .hint { color: var(--ink-dim); font-size: 11px; }
       .dock.armed .hint { color: var(--accent-ink); opacity: .85; }
