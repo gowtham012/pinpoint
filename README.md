@@ -10,6 +10,10 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
 ```
 
+<video src="https://github.com/gowtham012/pinpoint/raw/main/docs/demo.mp4" controls muted playsinline width="900"></video>
+
+*Pinpoint on a local dev page: click an element, say what should change, the agent gets it.* ([watch the demo](https://github.com/gowtham012/pinpoint/raw/main/docs/demo.mp4))
+
 ## Quick start
 
 You need **Node 18+** and a Chromium browser (Chrome, Arc, Brave or Edge). The `claude` CLI is
