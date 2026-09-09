@@ -10,6 +10,8 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
 ```
 
+![Pinpoint on the demo site: the bar in the corner, and a numbered pin on the button being changed](docs/images/hero.png)
+
 ## Quick start
 
 You need **Node 18+** and a Chromium browser (Chrome, Arc, Brave or Edge). The `claude` CLI is
@@ -109,17 +111,17 @@ Hovering outlines each element and names its React/Vue component, with a comment
 | ![The bar, idle](docs/images/bar-idle.png) | ![The bar resting as a dot](docs/images/bar-mini.png) | ![The bar while picking, with a Stop control](docs/images/bar-armed.png) |
 | It tells you the shortcut, and who is here — you, and your agent. | After a few seconds it settles to a dot, out of your way. Hover to bring it back. | Picking. The bar is click-through so it can never block the element you are aiming at; **Stop** is the exception. |
 
-![The comment popover on a form field, showing the element it picked](docs/images/popover.png)
+![The comment popover on a call-to-action button, showing the element it picked](docs/images/popover.png)
 
 The popover names exactly what you picked, so you can tell two near-identical buttons apart before you type.
 
-![A numbered pin on the annotated field](docs/images/pin.png)
+![A numbered pin on the annotated button](docs/images/pin.png)
 
 ### Marking an area, not one element
 
 Some changes are about a group, not a control — *"make these cards two-up on mobile"*. **Drag** instead of clicking and you get a box.
 
-![Dragging a region across a group of checkboxes](docs/images/region.png)
+![Dragging a region across the three pricing tiers, with its running size](docs/images/region.png)
 
 A box has no element of its own, so it is anchored to the **deepest element that fully contains it**. That is what lets a region pin survive a re-render exactly as an element pin does, and it means your agent gets a real container to change — plus the list of what the box contained, and a screenshot cropped to the box — rather than four coordinates.
 
@@ -300,13 +302,17 @@ their element, a dense table, and a form.
 cd demo && python3 -m http.server 8080     # then open http://localhost:8080
 ```
 
+Every screenshot in this README is taken from that page by `node tools/make-screenshots.mjs`, which
+runs the real extension against the real bridge in its own throwaway profile — so the pictures
+cannot drift away from what the tool actually does.
+
 ## Testing
 
 ```bash
 cd test && npm install && npx playwright install chromium && npm test
 ```
 
-87 tests. `bridge.test.mjs` (34) runs its own daemon on a scratch port with a temp `PINPOINT_HOME`: validation, filters, the live-event channel, deferred screenshot attachment, the project mirror, loopback/origin guards, persistence across restarts, pruning, every CLI subcommand, hook installation, and every MCP tool over both stdio and Streamable HTTP. `e2e.test.mjs` (53) loads the unpacked extension into headless Chromium and drives real pages: React, Vue, plain HTML with shadow DOM and an iframe, a `default-src 'none'` CSP page, a 3,600-node stress page where every generated selector must resolve back to its own element, DPR 2, cross-tab sync, live resolve, navigating mid-send, switching tabs mid-send, the popup, the on-page bar and its notes list, sticky comment mode, the offline fallback, refusing to load on non-local sites, live agent presence, and a multi-step form that rebuilds its whole DOM with `innerHTML` (where pins must follow their own element or disappear, never silently re-bind to a stranger).
+101 tests. `bridge.test.mjs` (44) runs its own daemon on a scratch port with a temp `PINPOINT_HOME`: validation, filters, the live-event channel, deferred screenshot attachment, the project mirror, loopback/origin guards, persistence across restarts, pruning, every CLI subcommand, hook installation, every MCP tool over both stdio and Streamable HTTP, the native messaging launcher driven directly over its own stdio protocol, and restarting the bridge in place. `e2e.test.mjs` (57) loads the unpacked extension into headless Chromium and drives real pages: React, Vue, plain HTML with shadow DOM and an iframe, a `default-src 'none'` CSP page, a 3,600-node stress page where every generated selector must resolve back to its own element, DPR 2, cross-tab sync, live resolve, navigating mid-send, switching tabs mid-send, the popup, the on-page bar and its notes list, sticky comment mode, the offline fallback, refusing to load on non-local sites, live agent presence, starting and restarting the bridge from the popup, and a multi-step form that rebuilds its whole DOM with `innerHTML` (where pins must follow their own element or disappear, never silently re-bind to a stranger).
 
 ## Notes on safety and storage
 
