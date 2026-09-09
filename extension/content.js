@@ -761,7 +761,11 @@
   function togglePanel(force) {
     const open = force !== undefined ? force : ui.panel.style.display !== "flex";
     ui.panel.style.display = open ? "flex" : "none";
-    if (open) renderPanel();
+    if (!open) return;
+    renderPanel();
+    // Opening the panel is a request for the current state: an agent may have finished something
+    // since the page loaded, and its reply is the whole point of looking.
+    loadReplies().then(() => { if (ui.panel.style.display === "flex") renderPanel(); });
   }
   ui.panelClose.addEventListener("click", () => togglePanel(false));
 
@@ -1106,7 +1110,13 @@
       height: Math.min(r.height, window.innerHeight - Math.max(0, r.top)),
     };
     if (rect.width < 2 || rect.height < 2) return null;
-    return { rect, dpr: window.devicePixelRatio || 1 };
+    // Also send the rect in DOCUMENT space. The worker crops later, and if the page scrolled in
+    // between, viewport coordinates point at whatever has moved into that spot — silently
+    // producing a confident picture of the wrong thing. Document coordinates survive scrolling.
+    const doc = isTop
+      ? { x: r.left + window.scrollX + off.x, y: r.top + window.scrollY + off.y, width: r.width, height: r.height }
+      : null;
+    return { rect, dpr: window.devicePixelRatio || 1, doc };
   }
 
   // Our own overlay must not appear in the crop.
@@ -1375,6 +1385,7 @@
     else if (msg.type === "reloadPins") { loadPins().then(() => { refreshDock(); reply({ ok: true }); }); return true; }
     else if (msg.type === "showDock") { chrome.storage.local.remove(HIDE_KEY).finally(() => { dockHidden = false; refreshDock(); reply({ ok: true }); }); return true; }
     else if (msg.type === "clearPins") { pins.forEach((p) => p.node.remove()); pins = []; reply({ ok: true }); }
+    else if (msg.type === "viewportNow") reply({ x: window.scrollX, y: window.scrollY, w: window.innerWidth, h: window.innerHeight, url: location.href });
     else if (msg.type === "ping") reply({ ok: true, picking, pins: pins.length });
   });
 })();

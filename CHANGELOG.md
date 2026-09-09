@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Fixed
+- **A screenshot could show a different part of the page, with nothing saying so.** The crop was
+  measured in viewport coordinates when Send was pressed but taken moments later by the worker, so
+  scrolling in between left those coordinates pointing at whatever had moved into that spot — and
+  `screenshotSkipped` stayed unset, so the agent received a confident picture of something the
+  developer never marked. Worse than no picture. The rect is now also sent in document coordinates
+  and re-derived against the page's actual scroll at capture time, so a small scroll still gets a
+  correct crop and scrolling away is refused with a reason. (The README already promised this
+  behaviour; it was not true.)
 - **Clicking Stop also opened a comment box on the bar itself.** `isOurs()` asked
   `el.closest("pinpoint-root")`, and `closest()` does not cross shadow boundaries — so from inside
   our own shadow root every control Pinpoint owns read as page content, and the document's
