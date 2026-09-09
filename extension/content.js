@@ -117,6 +117,9 @@
         background: var(--ink); color: var(--surface);
       }
       .dock.armed .stop:hover { background: color-mix(in srgb, var(--ink) 82%, var(--surface)); }
+      /* The notes list stays reachable while picking — you are usually marking things *because*
+         you want to see what is already there. Like Stop, it takes its pointer events back. */
+      .dock.armed .count { pointer-events: auto; }
       .dock.armed .label { display: none; }
       .dock.armed .sep, .dock.armed .close { display: none; }
       .dock.mini .count { padding: 0 8px; }
@@ -163,6 +166,7 @@
       .dock.mini.agent-live .who { display: inline-flex; }
       .dock .count { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
       .dock .count b { color: var(--ink); font-weight: 600; }
+      .dock .count.only-done b { color: var(--ink-dim); }
       .dock .sep { width: 1px; height: 14px; background: var(--line); margin: 0 4px; flex: none; align-self: center; }
       .dock .close { color: var(--ink-dim); height: 24px; width: 24px; padding: 0; font-size: 14px;
                      justify-content: center; }
@@ -714,10 +718,16 @@
     else if (!ui.dock.classList.contains("mini")) expandDock();
     // While armed the Stop button carries the Esc affordance, so the hint just names the action.
     ui.dockHint.innerHTML = picking ? `Click any element` : `<kbd>${MAC ? "\u2325\u21e7A" : "Alt+Shift+A"}</kbd>`;
-    ui.dockCountN.textContent = String(pins.length);
-    ui.dockCountWord.textContent = pins.length === 1 ? "note" : "notes";
+    // The counter is the ONLY way into the notes panel. Hiding it at zero pending meant that the
+    // moment an agent finished everything, its replies became unreachable — the note looked simply
+    // deleted. Keep the door open while there is anything to read.
+    const pend = pins.length, done = replies.length;
+    ui.dockCountN.textContent = String(pend || done);
+    ui.dockCountWord.textContent = pend ? (pend === 1 ? "note" : "notes") : "done";
+    ui.dockCount.classList.toggle("only-done", !pend && done > 0);
+    ui.dockCount.title = pend ? "Notes on this page" : "What your agent finished here";
     paintAgent();
-    ui.dockCount.style.display = pins.length ? "inline-flex" : "none";
+    ui.dockCount.style.display = pend || done ? "inline-flex" : "none";
     ui.dock.style.display = bridgeOk && !dockHidden ? "flex" : "none";
     requestAnimationFrame(keepDockOnScreen);
   }
@@ -769,7 +779,7 @@
     renderPanel();
     // Opening the panel is a request for the current state: an agent may have finished something
     // since the page loaded, and its reply is the whole point of looking.
-    loadReplies().then(() => { if (ui.panel.style.display === "flex") renderPanel(); });
+    loadReplies().then(() => { paintDock(); if (ui.panel.style.display === "flex") renderPanel(); });
   }
   ui.panelClose.addEventListener("click", () => togglePanel(false));
 
@@ -1353,6 +1363,7 @@
       paintDock();
       setAgent(res.agent ? { ...res.agent, seenAt: Date.now() } : null);
       await loadReplies();
+      paintDock();
       if (ui.panel.style.display === "flex") renderPanel();
     } catch {}
   }

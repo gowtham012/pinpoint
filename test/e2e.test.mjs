@@ -1069,6 +1069,57 @@ test("the dock shows a live count and opens a list of this page's notes", async 
   await page.close();
 });
 
+test("the notes list stays reachable: after everything is finished, and while picking", async () => {
+  // Reported from real use, twice over. The counter is the only way into the panel, and it was
+  // hidden whenever there were no PENDING notes — so the moment an agent finished the last one its
+  // reply became unreachable and the note looked simply deleted. It was also inert while picking,
+  // which is exactly when you want to check what you have already marked.
+  await clearAll();
+  const page = await openPage("/");
+  await annotate(page, page.locator("h1"), "make this bigger");
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 1, null, { timeout: 6000 });
+
+  const [a] = await pending();
+  await fetch(`${BASE}/annotations/${a.id}/resolve`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ note: "Bumped to 40px in Hero.tsx:12" }),
+  });
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 0, null, { timeout: 6000 });
+
+  // nothing pending — the door must still be there
+  await page.waitForFunction(() => {
+    const c = document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .count");
+    return c && c.style.display !== "none";
+  }, null, { timeout: 6000 });
+  const label = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    return r.querySelector(".dock .count").textContent.replace(/\s+/g, " ").trim();
+  });
+  assert.match(label, /done/i, `with nothing pending it should offer what is done, got "${label}"`);
+
+  // and it opens, showing the agent's reply
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .count").click());
+  await page.waitForFunction(() => !!document.querySelector("pinpoint-root").shadowRoot.querySelector(".panel .item.done"), null, { timeout: 6000 });
+  assert.match(
+    await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".panel .item.done .what").textContent),
+    /Bumped it to 40px|Bumped to 40px/
+  );
+  await page.keyboard.press("Escape");
+
+  // and it is clickable while picking, not just visible
+  await arm(page);
+  const pe = await page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    return {
+      bar: getComputedStyle(r.querySelector(".dock")).pointerEvents,
+      count: getComputedStyle(r.querySelector(".dock .count")).pointerEvents,
+    };
+  });
+  assert.equal(pe.bar, "none", "the bar as a whole still cannot block the element you are aiming at");
+  assert.equal(pe.count, "auto", "but the notes counter takes clicks while picking");
+  await page.close();
+});
+
 test("a finished note stays in the panel, showing what the agent said", async () => {
   // It used to just vanish, so you never learned what the agent actually did.
   await clearAll();
