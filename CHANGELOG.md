@@ -71,6 +71,12 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
   transition is gone.
 
 ### Changed
+- **New logo** — a click: an open ring, the burst of the press, and the cursor coming through the
+  gap. Drawn as SVG rather than traced from a raster, so it carries transparency and stays crisp.
+  Two cuts on purpose: at 16px the burst strokes and the ring merge into an unreadable blob, so the
+  toolbar size drops the burst, thickens the ring and enlarges the cursor. Sources and a
+  regeneration script live in `tools/logo/` and `tools/make-icons.sh`. It is violet rather than
+  black because a black icon disappears on a dark browser toolbar.
 - **Note numbers are per page.** One global counter meant the first note on a new site could read
   "#14", which tells the person looking at it nothing. Each page now numbers from 1, matching the
   pins on screen, the panel titled "Notes on this page", and the counter. Ids stay globally unique
