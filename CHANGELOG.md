@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Added
+- **`node bridge/cli.js setup` — the whole install in one command.** With `git clone` in front of it
+  that is two commands and nothing else: it installs the bridge's dependencies itself (it is written
+  to run before `npm install`), then asks, with a default on every question — which project to
+  annotate, which of Claude Code, Cursor and Codex to register (merging their config rather than
+  replacing it, and backing up Codex's TOML), whether to install the hooks, and which of your
+  installed browsers to load the extension into. It opens that browser's extensions page, puts the
+  `extension/` path on your clipboard, and then *confirms* the extension connected — the bridge now
+  records `extensionSeenAt` and reports it on `/health`. `--yes` runs it unattended; a pipe or a CI
+  runner is treated the same way rather than hanging on a prompt. `setup.sh` is now a shim for it.
+- **[PRIVACY.md](PRIVACY.md) and [docs/chrome-web-store.md](docs/chrome-web-store.md).** What the
+  extension handles, where it is stored, and the one place it leaves by design — the agent you
+  connect; plus the packaging, permission justifications and listing copy needed to put the extension
+  on the Chrome Web Store, so "Load unpacked" stops being the only way in. The README also says
+  plainly what Pinpoint is *not*: a browser-driving agent.
 - **Start and restart the bridge from the browser.** `node cli.js install-native-host` registers a
   small native messaging launcher with every Chromium-based browser on the machine; after that the
   popup's **Start bridge** button really starts the process, and while the bridge is running that

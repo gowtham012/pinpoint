@@ -10,7 +10,7 @@ cd pinpoint/bridge && npm install
 cd ../test && npm install && npx playwright install chromium
 ```
 
-Run the bridge, load `extension/` unpacked in Chrome (`chrome://extensions` → Developer mode → Load unpacked), and you are developing.
+Or just `node bridge/cli.js setup`, which does all of that and asks the rest. Then load `extension/` unpacked in Chrome (`chrome://extensions` → Developer mode → Load unpacked), and you are developing.
 
 There is no bundler and no transpiler. Edit the files, hit the reload arrow on the extension card, done.
 
@@ -36,7 +36,14 @@ Prefer a test that describes the user's situation (`"switching tabs right after 
 - **The content script runs in two worlds.** `content.js` is the isolated world; `inspector.js` runs in the page's MAIN world because React fibers and Vue instances are invisible from the isolated one. They talk over a synchronous CustomEvent round-trip.
 - **Screenshots are taken by the service worker, not the page**, after the annotation is already stored. That is deliberate: navigating away must cost you the picture, never the comment.
 - **Selectors prefer stable attributes** (`button[data-action="next"]`) over positions, and every annotation carries a fingerprint so a pin can tell whether the element its selector now matches is really the one you clicked.
+- **The icons are generated, not hand-edited.** `bash tools/make-icons.sh` cuts `extension/icon{16,48,128}.png` and the in-page bar's mark out of `tools/logo/mark.png`.
 - **The bridge refuses any request carrying a web page's `Origin`.** Only the extension and local CLI tools may talk to it. Page-scraped content is labelled as untrusted data wherever it reaches an agent.
+
+## Publishing
+
+Listing the extension on the Chrome Web Store is [docs/chrome-web-store.md](docs/chrome-web-store.md):
+packaging, the permission justifications reviewers ask for, the listing copy and the screenshot list.
+[PRIVACY.md](PRIVACY.md) is the policy the Store requires a URL for, and it must keep matching the code.
 
 ## Reporting a bug
 

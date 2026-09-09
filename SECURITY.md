@@ -4,6 +4,8 @@
 
 Please report vulnerabilities privately through GitHub's *Report a vulnerability* button on the Security tab, rather than opening a public issue.
 
+For what is collected, where it is stored and who else can see it, see [PRIVACY.md](PRIVACY.md).
+
 ## Design notes
 
 Pinpoint moves text and screenshots from your browser to your coding agent, so the trust boundaries matter.

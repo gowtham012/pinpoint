@@ -2,6 +2,7 @@
 
 [![tests](https://github.com/gowtham012/pinpoint/actions/workflows/test.yml/badge.svg)](https://github.com/gowtham012/pinpoint/actions/workflows/test.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![stars](https://img.shields.io/github/stars/gowtham012/pinpoint?style=flat)](https://github.com/gowtham012/pinpoint/stargazers)
 
 Click an element on your local dev site, write what should change, and your coding agent gets it — with the selector, DOM path, computed styles, React/Vue component chain, source-file hint and a cropped screenshot. No screenshot files piling up in your Downloads folder, no describing "the third button on the left".
 
@@ -14,99 +15,131 @@ Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──M
 
 *Click an element, say what should change, your agent gets it. ([full-speed video](docs/demo.mp4))*
 
+## It is not a browser-driving agent
+
+The distinction matters, because the two get filed together and they are opposites:
+
+- **Playwright MCP, agent-browser, computer-use** put the agent in the driver's seat — it navigates,
+  clicks and asserts. Good for testing and for browsing on your behalf.
+- **Pinpoint keeps you in it.** You click, you say what should change, and the agent gets structured
+  context to edit *code* with: a selector, the styles, the component chain, a source-file hint, a crop
+  of the element. It never touches the page itself.
+- **A pasted screenshot** carries none of that. The agent gets pixels and has to guess which control
+  you meant, what it is called, and where it lives in the tree.
+
+So it composes with browser automation rather than competing: point at the thing, let the agent change
+it, let your tests drive the browser.
+
 ## Quick start
 
-You need **Node 18+** and a Chromium browser (Chrome, Arc, Brave or Edge). The `claude` CLI is
-only needed for steps 3 and 4.
+**You need** Node 18+ and a Chromium browser (Chrome, Edge, Brave, Arc, Opera, Vivaldi).
 
-Everywhere below, replace `~/code/my-app` with **your own project** — the repo whose UI you want
-to annotate.
+```bash
+git clone https://github.com/gowtham012/pinpoint
+node pinpoint/bridge/cli.js setup
+```
+
+That is the install. `setup` installs its own dependencies first, then asks — every question has a
+default, so Enter all the way through is a working setup:
+
+- **which project's UI you want to annotate** — the repo whose files your agent will be editing
+- **which agents to wire up** — it detects Claude Code, Cursor and Codex and writes the MCP entry for
+  each: `claude mcp add` for Claude Code, `<project>/.cursor/mcp.json` for Cursor,
+  `~/.codex/config.toml` for Codex. Existing entries are merged, never replaced, and the TOML file is
+  backed up before it is touched.
+- **whether to install the Claude Code hooks**, which carry pending notes in with your next message
+- **which browser** to load the extension into, listing the ones you actually have
+
+Then it registers the launcher behind the popup's **Start bridge** button and starts the bridge.
+Non-interactive, for a scripted machine: `node pinpoint/bridge/cli.js setup ~/code/my-app --yes`.
+
+**The one step that cannot be a command.** Chrome does not let a terminal load an unpacked extension
+into your own profile — only the Web Store or an enterprise policy can. So setup opens your browser's
+extensions page and puts the `extension/` folder on your clipboard: **Developer mode** on →
+**Load unpacked** → paste. The terminal confirms **✓ Pinpoint is live in Chrome** on its own, because
+the bridge can see the extension connect.
+
+**Restart Claude Code once** afterwards — it reads MCP servers and hooks when a session starts.
+
+**Then try it.** Open your dev site (or [the demo page](#a-page-to-try-it-on)), press **⌥⇧A** /
+**Alt+Shift+A**, click any element, type what should change, **⌘↩** / **Ctrl+Enter**. Type anything at
+all in Claude Code and your note arrives with it. If the bar never appears, see
+[Troubleshooting](#troubleshooting).
+
+<details>
+<summary>Doing it by hand instead, and the Windows / <code>file://</code> notes</summary>
+
+`setup` writes config into your repo and your agent's files. If you would rather do that yourself,
+it is four steps — and the order matters: `$PWD` is baked into the MCP entry, so step 2 has to run
+from `pinpoint/bridge`, before the bridge takes over the terminal.
 
 ```bash
 # 1. get it
 git clone https://github.com/gowtham012/pinpoint
 cd pinpoint/bridge && npm install
-```
 
-```bash
-# 2. start the bridge, and leave it running.
-#    This blocks the terminal — open a second one for everything below.
+# 2. wire up Claude Code (once, from this folder)
+claude mcp add pinpoint -s user -- node "$PWD/cli.js" mcp
+node cli.js install-hooks ~/code/my-app                  # notes arrive without being asked
+node cli.js install-native-host --project ~/code/my-app   # optional: the popup's "Start bridge" button
+
+# 3. load extension/ unpacked at chrome://extensions (Developer mode on)
+# 4. start the bridge, and leave it running
 node cli.js --project ~/code/my-app
 ```
 
-**3. Load the extension.** Chrome → `chrome://extensions` → **Developer mode** on →
-**Load unpacked** → pick the **`extension/`** folder (one level up from `bridge/`).
-The toolbar icon's dot turns green once it can see the bridge.
+Restart Claude Code once after step 2. `--project` is optional: it keeps
+`<repo>/.pinpoint/pending.md` current for agents that read a file instead of MCP.
 
-> Annotating a page you opened as a `file://` URL? Chrome keeps that off by default. On
-> `chrome://extensions`, open Pinpoint's **Details** and turn on **"Allow access to file URLs"**,
-> then reload the page. Without it Pinpoint cannot appear on `file://` pages at all.
+Annotating a page you opened as a `file://` URL? Chrome keeps that off by default. On
+`chrome://extensions`, open Pinpoint's **Details** and turn on **"Allow access to file URLs"**, then
+reload the page.
 
-```bash
-# 4. teach Claude Code about Pinpoint (once), from pinpoint/bridge
-claude mcp add pinpoint -s user -- node "$PWD/cli.js" mcp
-node cli.js install-hooks ~/code/my-app     # so annotations arrive without being asked
-node cli.js install-native-host             # so the popup's "Start bridge" button works
-```
-
-**5. Restart Claude Code once.** Hooks are only read when a session starts.
-
-> **On Windows:** `$PWD` above is a shell variable — it works in PowerShell and Git Bash, but not
-> in `cmd.exe`. If you are in `cmd.exe`, run `node cli.js --help` and copy the ready-made
-> `claude mcp add …` line it prints at the bottom, which carries the full path already. The
-> keyboard shortcuts are `Alt+Shift+A` and `Ctrl+Enter`, and the UI labels them that way for you.
-> `setup.sh` is macOS-only; follow the numbered steps instead.
-
-In a hurry? `bash setup.sh ~/code/my-app` from the repo root does steps 1, 2 and 4 in one go
-(macOS; it also opens `chrome://extensions` for step 3).
+On Windows, `$PWD` works in PowerShell and Git Bash but not `cmd.exe` — run `node cli.js --help` and
+copy the ready-made `claude mcp add …` line it prints, which carries the full path already. The
+shortcuts are `Alt+Shift+A` and `Ctrl+Enter`, and the UI labels them that way. `install-native-host`
+is macOS and Linux only; on Windows, start the bridge in a terminal.
+</details>
 
 ## Which browsers
 
-**Chromium browsers work** — Chrome, Edge, Brave, Arc, Opera, Vivaldi. They share the extension
-APIs this uses (MV3 with a `service_worker` background, promise-style `chrome.*`, `scripting`,
-`captureVisibleTab`), so "Load unpacked" is the same everywhere; only the menu it lives under
-differs. The test suite drives headless Chromium, so that is the one continuously verified.
+**Chromium** — Chrome, Edge, Brave, Arc, Opera, Vivaldi. Load unpacked, as above; the test suite
+drives headless Chromium, so that is the one continuously verified.
+**Safari** — built rather than loaded: `bash tools/make-safari.sh` (needs Xcode).
+**Firefox** — not yet.
 
-**Firefox still will not load it**, though it is closer than it was. The namespace problem is gone
-— every script now prefers `browser` where it exists, so the promise-style calls would work — and
-`chrome.extension.isAllowedFileSchemeAccess` is probed rather than assumed. Two manifest blockers
-remain:
+<details>
+<summary>What differs on Safari and what blocks Firefox</summary>
 
-- the manifest declares `background: { service_worker }`; Firefox MV3 wants `background: { scripts }`
-- Firefox requires `browser_specific_settings.gecko.id`, which is absent
+Safari does not take unpacked extensions, so `tools/make-safari.sh` wraps it in a small macOS app —
+it converts, builds, and prints the four Safari settings to flip (the important one is
+**Develop ▸ Allow Unsigned Extensions**, which resets every time Safari quits). One capability is
+missing there: `"world": "MAIN"` content scripts are unsupported, so `inspector.js` cannot read React
+fibers or Vue instances, which costs you the **component chain and source-file hint**. Everything else
+— picking, regions, comments, pins, screenshots, the bridge, MCP — is unchanged.
 
-Both are fixable in the manifest, but keeping them honest needs a Firefox job in CI rather than a
-claim in a README. Open an issue if you want it.
-
-**Safari works, but it has to be built rather than loaded.** Safari does not take unpacked
-extensions; the extension is wrapped in a small macOS app. One command does the whole thing:
-
-```bash
-bash tools/make-safari.sh          # needs Xcode, not just the command line tools
-```
-
-It converts, builds, and prints the path plus the four Safari settings to flip (the important one
-is **Develop ▸ Allow Unsigned Extensions**, which resets every time Safari quits). Verified here:
-the project converts and `xcodebuild` reports **BUILD SUCCEEDED**.
-
-One capability is missing on Safari: `"world": "MAIN"` content scripts are not supported, so
-`inspector.js` cannot read React fibers or Vue instances. That costs you the **component chain and
-source-file hint** — Pinpoint already handles a page with no framework metadata and tells the agent
-so, and the rest (picking, regions, comments, pins, screenshots, the bridge, MCP) is unchanged.
+Firefox is closer than it was (every script prefers `browser` where it exists), but two manifest
+blockers remain: `background: { service_worker }` where Firefox MV3 wants `background: { scripts }`,
+and a missing `browser_specific_settings.gecko.id`. Both are fixable, but keeping them honest needs a
+Firefox job in CI rather than a claim in a README. Open an issue if you want it.
+</details>
 
 ## Where it runs
 
-Pinpoint is a tool for the app you are building, so it only loads itself on local development pages. It appears **on its own** on `localhost`, `127.0.0.1`, and `.local` / `.test` / `.localhost` hosts — plus `file://` pages, once you have granted file access (see the Quick start). On any other site it is simply not there — no bar, no overlay, nothing injected.
+Pinpoint is a tool for the app you are building, so it only loads itself on local development pages:
+`localhost`, `127.0.0.1`, `.local` / `.test` / `.localhost` hosts, and `file://` pages once you have
+granted file access. On any other site it is simply not there — no bar, no overlay, nothing injected.
 
-Anywhere else — a staging URL, or a private LAN address like `192.168.1.5:3000` when you are testing from your phone — the toolbar popup turns it on for that one tab. Those addresses are recognised as local, but Chrome only injects automatically into the hosts listed above, so the bar will not appear until you opt in from the popup.
+Anywhere else — a staging URL, or a LAN address like `192.168.1.5:3000` when you are testing from your
+phone — the toolbar popup turns it on for that one tab.
 
 ## Using it
 
-While the bridge is running, a small bar sits in the **top-right** corner of every page — that is how you know Pinpoint is live in this tab. Click it (or press **⌥⇧A** / **Alt+Shift+A**) to start marking. The toolbar popup moves it to any corner.
-
-Comment mode stays on. Click an element, type what should change, press **⌘↩** / **Ctrl+Enter**, and you are immediately ready for the next one — no shortcut in between. **Esc** when you are done, or click **Stop** on the bar. While you are marking the bar is click-through, so it can never sit between you and the element you want — Stop is the one part of it that still takes a click.
-
-Hovering outlines each element and names its React/Vue component, with a comment cursor so the mode is obvious.
+While the bridge is running, a small bar sits in the **top-right** corner of every page. Click it (or
+press **⌥⇧A** / **Alt+Shift+A**) to start marking. Click an element, type what should change, press
+**⌘↩** / **Ctrl+Enter**, and you are immediately ready for the next one. **Esc** when you are done, or
+click **Stop** on the bar. The **×** hides the bar for that site; the popup brings it back, and can
+move it to any corner.
 
 | | | |
 |---|---|---|
@@ -119,83 +152,91 @@ The popover names exactly what you picked, so you can tell two near-identical bu
 
 ![A numbered pin on the annotated field](docs/images/pin.png)
 
-### Marking an area, not one element
+A numbered pin sticks to the element — numbered per page, so each page counts from 1. Pins live in the
+bridge, not the page, so they survive reloads, appear in every tab showing that page, and vanish the
+moment your agent marks the change done. On apps that rebuild their DOM, each pin re-finds its own
+element by identity, and hides itself rather than sit on a different element that happens to match the
+old selector. The bar's counter opens the list of everything marked on this page; click a row to jump to it.
 
-Some changes are about a group, not a control — *"make these cards two-up on mobile"*. **Drag** instead of clicking and you get a box.
+**Marking an area.** Some changes are about a group — *"make these cards two-up on mobile"*. **Drag**
+instead of clicking and you get a box, anchored to the deepest element that fully contains it. Your
+agent gets a real container to change, plus the list of what the box held and a screenshot cropped to it.
 
-A box has no element of its own, so it is anchored to the **deepest element that fully contains it**. That is what lets a region pin survive a re-render exactly as an element pin does, and it means your agent gets a real container to change — plus the list of what the box contained, and a screenshot cropped to the box — rather than four coordinates.
-
-### Seeing what your agent did
-
-A finished note does not just vanish. It stays in the panel with your agent's own reply underneath,
-so you can read what changed without going back to the terminal.
+**Reading the reply.** A finished note does not vanish. It stays in the panel with your agent's own
+reply underneath, so you can read what changed without going back to the terminal.
 
 ![The notes panel: a pending note, and a finished one with the agent's reply beneath it](docs/images/agent-reply.png)
 
 That reply is the `note` your agent passes to `resolve_annotation`, which is **required** — the tool
-tells it that you read this in your browser, and that "done" is not an answer.
+tells it that you read this in your browser, and that "done" is not an answer. While it works, the bar
+says what it is doing: the note it is looking at gets a ring, and a note it completes disappears in
+front of you.
 
-The bar also shows who is present: you, and your coding agent. When the agent reads your notes, opens one, or finishes one, its avatar lights up and the bar says what it is doing — the note it is looking at gets a ring, and a note it completes disappears in front of you. The bar's counter opens a list of everything marked on the page; click a row to jump to it. It stays available while you are picking, and after everything is finished it reads *done* rather than vanishing — that list is where your agent's replies live. The **×** hides the bar for that site (the toolbar popup brings it back, and can move it to any corner).
+Then just talk to Claude Code normally. With hooks installed you don't have to mention Pinpoint at all;
+without them, say *"apply my pinpoint annotations"*. If the bridge isn't running, **Send** copies a
+ready-to-paste prompt to your clipboard instead, so nothing is lost.
 
-A numbered pin sticks to the element. Numbers are per page, so each page counts from 1 — the id in the annotation is the unique handle your agent uses. Pins live in the bridge, not the page, so they survive reloads, appear in every tab showing that page, and vanish the moment your agent marks the change done — no reload needed. On apps that rebuild their DOM (a step change, a route change, a re-render) each pin re-finds its own element by identity, and hides itself rather than sit on a different element that happens to match the old selector.
+<details>
+<summary>Starting and restarting the bridge from the browser</summary>
 
-Then just talk to Claude Code normally. With hooks installed you don't have to mention Pinpoint at all: whatever is pending arrives with your next message. Without hooks, say *"apply my pinpoint annotations"*.
+A browser cannot start a process, so `install-native-host` registers a tiny launcher with Chrome (and
+Brave, Edge, Arc, Chromium, Vivaldi, Opera). After that the popup's **Start bridge** button works, and
+while the bridge is running that button and the **↻** in the on-page bar restart it — what you want
+after pulling a new build, without leaving the page.
 
-If the bridge isn't running, **Send** copies a ready-to-paste prompt to your clipboard instead, so nothing is lost.
+The launcher can do exactly one thing: run this repo's own `cli.js` on a port number, read from the
+popup's setting and never from the page. Restart is plain HTTP to the bridge itself, so it needs no
+launcher and works in Safari too. macOS and Linux only for now; on Windows, start the bridge in a terminal.
+</details>
 
-### Starting and restarting it from the browser
+<details>
+<summary>When more than one agent is connected</summary>
 
-The bridge is a process, and a browser cannot start one — so `install-native-host` registers a tiny
-launcher with Chrome (and Brave, Edge, Arc, Chromium, Vivaldi, Opera). After that the popup's
-**Start bridge** button works, and while the bridge is running that button and the **↻** in the
-on-page bar restart it — which is what you want after pulling a new build, without leaving the page.
-
-The launcher can do exactly one thing: run this repo's own `cli.js` on a port number. The port is
-read from the popup's setting, never from the page, and no path, command or project directory can
-cross that boundary. Restart is plain HTTP to the bridge itself, so it needs no launcher and works
-in Safari too. macOS and Linux only for now; on Windows, start the bridge in a terminal.
-
-### Which agent did what
-
-Agents introduce themselves in the MCP handshake, so when more than one is connected the bar names
-the one that is working (`claude-code`, `cursor-vscode`, `codex`) instead of saying "your agent",
-and each reply in the panel is attributed to whoever wrote it. `wait_for_annotation` hands each new
-note to exactly **one** waiting agent, so two agents watching at once share the queue rather than
-both doing the same note — and if one resolves something another already finished, it is told so.
+Agents introduce themselves in the MCP handshake, so the bar names the one that is working
+(`claude-code`, `cursor-vscode`, `codex`) instead of saying "your agent", and each reply in the panel is
+attributed to whoever wrote it. `wait_for_annotation` hands each new note to exactly **one** waiting
+agent, so two agents watching at once share the queue rather than both doing the same note — and if one
+resolves something another already finished, it is told so.
+</details>
 
 ## How your agent finds out
 
 Three mechanisms, strongest first. They stack — using all three is fine.
 
-**Hooks (automatic).** `node cli.js install-hooks <repo>` adds two entries to `<repo>/.claude/settings.json`: a `SessionStart` hook and a `UserPromptSubmit` hook, both running `cli.js print --hook`. That command prints nothing at all when nothing is pending, so a normal session is unaffected. When you have notes, it hands Claude the full detail of anything it has not seen yet, a one-line reminder of anything still outstanding, and an explicit instruction to say what is waiting rather than act on it silently. Net effect: mark something in the browser, type anything in Claude Code, and it comes along. Your own hooks and settings in that file are preserved, and re-running updates rather than duplicates.
-
-Restart Claude Code once after installing — hooks are read when a session starts.
-
-**MCP (on request).** The `pinpoint` MCP server gives the agent `get_pending_annotations`, `wait_for_annotation` and the rest. Its instructions tell the agent to check for annotations whenever you talk about a UI change, so "make that button bigger" usually triggers a lookup on its own.
-
-**A watch loop (hands-off).** Say *"watch pinpoint and apply each change as it comes in"*. The agent parks on `wait_for_annotation`, which returns the instant you hit Send — screenshot included.
+- **Hooks (automatic).** `node cli.js install-hooks <repo>` adds a `SessionStart` and a
+  `UserPromptSubmit` hook to `<repo>/.claude/settings.json`, both running `cli.js print --hook`. It
+  prints nothing when nothing is pending, so a normal session is unaffected. Mark something in the
+  browser, type anything in Claude Code, and it comes along. Your own settings in that file are
+  preserved, and re-running updates rather than duplicates. Restart Claude Code once afterwards.
+- **MCP (on request).** The `pinpoint` server's instructions tell the agent to check for annotations
+  whenever you talk about a UI change, so "make that button bigger" usually triggers a lookup on its own.
+- **A watch loop (hands-off).** Say *"watch pinpoint and apply each change as it comes in"*. The agent
+  parks on `wait_for_annotation`, which returns the instant you hit Send — screenshot included.
 
 ## Connecting other agents
 
-Both snippets below need the absolute path to `cli.js`. From `pinpoint/bridge`, run `pwd` and add
-`/cli.js` — or just copy the ready-made line that `node cli.js --help` prints at the bottom.
-Restart the editor afterwards; MCP servers are read at startup.
+Both snippets need the absolute path to `cli.js`: from `pinpoint/bridge`, run `pwd` and add `/cli.js` —
+or copy the ready-made line that `node cli.js --help` prints. Restart the editor afterwards; MCP servers
+are read at startup.
 
-**Cursor** — `.cursor/mcp.json` (in the project you are working on, or `~/.cursor/mcp.json` for all of them):
+**Cursor** — `.cursor/mcp.json` (or `~/.cursor/mcp.json` for every project):
 ```json
 { "mcpServers": { "pinpoint": { "command": "node", "args": ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"] } } }
 ```
 
-**Codex CLI** — `~/.codex/config.toml` (create the file if it does not exist):
+**Codex CLI** — `~/.codex/config.toml`:
 ```toml
 [mcp_servers.pinpoint]
 command = "node"
 args = ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"]
 ```
 
-**Any MCP client over HTTP** — `http://127.0.0.1:7331/mcp` (Streamable HTTP, stateless). Windsurf, Cline, Continue, Zed and Gemini CLI all take a URL.
+**Any MCP client over HTTP** — `http://127.0.0.1:7331/mcp` (Streamable HTTP, stateless). Windsurf,
+Cline, Continue, Zed and Gemini CLI all take a URL.
 
-**No MCP at all** — run the bridge with `--project <repo>` and it keeps `<repo>/.pinpoint/pending.md` current (with its own `.gitignore`, so it stays out of your commits). Tell any agent "read .pinpoint/pending.md and apply it"; it finishes each one with `node cli.js resolve <id>`. Or use the popover's *Copy prompt* / the popup's *Copy all as one prompt* to paste into any chat.
+**No MCP at all** — run the bridge with `--project <repo>` and it keeps `<repo>/.pinpoint/pending.md`
+current (with its own `.gitignore`). Tell any agent "read .pinpoint/pending.md and apply it"; it
+finishes each one with `node cli.js resolve <id>`. Or use *Copy prompt* in the popover to paste into any chat.
 
 ## Commands
 
@@ -248,55 +289,82 @@ source           framework (react/vue/svelte/angular/astro), component chain,
 screenshot       PNG of just the element (+8px), long edge ≤1200px
 ```
 
-For exact `file:line` on React 19 or Next, add a dev-only inspector plugin (`vite-plugin-react-inspector`, `@react-dev-inspector`) — Pinpoint reads the `data-source` attributes they emit, as well as React's own `_debugSource`/`_debugStack` and Vue's `__file`.
+For exact `file:line` on React 19 or Next, add a dev-only inspector plugin
+(`vite-plugin-react-inspector`, `@react-dev-inspector`) — Pinpoint reads the `data-source` attributes
+they emit, as well as React's own `_debugSource`/`_debugStack` and Vue's `__file`.
 
 ## Troubleshooting
 
-**No bar appears on the page.** The bar only shows while the bridge is running — that is how it
-tells you it is live. Check `node cli.js status` from `pinpoint/bridge`. If the bridge is up but
-the bar still isn't there, the page is probably not one Pinpoint injects into automatically (see
-*Where it runs*) — open the toolbar popup and turn it on for that tab.
+<details>
+<summary>No bar appears on the page</summary>
 
-**Nothing at all on a `file://` page.** Chrome keeps file access off per extension. On
-`chrome://extensions` → Pinpoint → **Details** → **"Allow access to file URLs"**, then reload.
+The bar only shows while the bridge is running — that is how it tells you it is live. Check
+`node cli.js status` from `pinpoint/bridge`. If the bridge is up but the bar still isn't there, the page
+is probably not one Pinpoint injects into automatically (see *Where it runs*) — open the toolbar popup
+and turn it on for that tab.
+</details>
 
-**The toolbar dot never turns green.** Either the bridge isn't running, or it is on a different
-port from the extension. The popup's **Port** field and the bridge's `--port` must match. If
-`node cli.js status` says *"port answers, but it is NOT the pinpoint bridge"*, something else owns
-that port — start the bridge with `--port 7332` and set 7332 in the popup too.
+<details>
+<summary>Nothing at all on a <code>file://</code> page</summary>
 
-**`port 7331 is already in use`.** Usually the bridge is already running from another terminal, in
-which case you're done. Otherwise pick a free port as above. Don't run two bridges at once: they
-share one store file and the last writer wins.
+Chrome keeps file access off per extension. On `chrome://extensions` → Pinpoint → **Details** →
+**"Allow access to file URLs"**, then reload.
+</details>
 
-**An annotation has no screenshot.** The picture is taken just after your comment is stored, so
-the comment is never lost. If the page navigated or the tab was closed in that moment, the
-annotation records why instead of attaching a picture of the wrong page. The comment, selector and
-styles are all still there.
+<details>
+<summary>The toolbar dot never turns green</summary>
 
-**Claude Code doesn't mention my notes.** Hooks are read when a session starts — restart it once
-after `install-hooks`. Check that `<your repo>/.claude/settings.json` has two entries containing
-`print --hook`, and that the path in them still exists (moving your Pinpoint clone breaks it —
-re-run `install-hooks`). You can always just say *"apply my pinpoint annotations"*.
+Either the bridge isn't running, or it is on a different port from the extension: the popup's **Port**
+field and the bridge's `--port` must match. If `node cli.js status` says *"port answers, but it is NOT
+the pinpoint bridge"*, something else owns that port — start the bridge with `--port 7332` and set 7332
+in the popup too.
+</details>
 
-**"Start bridge" says one-time setup is needed.** Run `node cli.js install-native-host` once, then
-press it again. If you have already run it, run it again — moving the repo, or reloading a build
-without the manifest `key`, changes the extension's id, and Chrome reports a rejected id the same
-way as a missing launcher. Quit and reopen the browser once afterwards.
+<details>
+<summary><code>port 7331 is already in use</code></summary>
 
-**The button says the launcher couldn't find Node.** The launcher bakes in an absolute path to
-node, because a browser-started process does not get your shell's `PATH`. If node moved (a new nvm
-version, a Homebrew upgrade), re-run `install-native-host`.
+Usually the bridge is already running from another terminal, in which case you're done. Otherwise pick a
+free port as above. Don't run two bridges at once: they share one store file and the last writer wins.
+</details>
 
-**Nothing works and you want a clean slate.** `node cli.js clear` empties the store;
-`~/.pinpoint/annotations.json` is the only state outside your repo.
+<details>
+<summary>An annotation has no screenshot</summary>
+
+The picture is taken just after your comment is stored, so the comment is never lost. If the page
+navigated or the tab was closed in that moment, the annotation records why instead of attaching a picture
+of the wrong page. The comment, selector and styles are all still there.
+</details>
+
+<details>
+<summary>Claude Code doesn't mention my notes</summary>
+
+Hooks are read when a session starts — restart it once after `install-hooks`. Check that
+`<your repo>/.claude/settings.json` has two entries containing `print --hook`, and that the path in them
+still exists (moving your Pinpoint clone breaks it — re-run `install-hooks`). You can always just say
+*"apply my pinpoint annotations"*.
+</details>
+
+<details>
+<summary>"Start bridge" says one-time setup is needed, or can't find Node</summary>
+
+Run `node cli.js install-native-host` once, then press it again. If you have already run it, run it again
+— moving the repo, or reloading a build without the manifest `key`, changes the extension's id, and Chrome
+reports a rejected id the same way as a missing launcher. Quit and reopen the browser afterwards. The
+launcher also bakes in an absolute path to node, because a browser-started process does not get your
+shell's `PATH`; if node moved (a new nvm version, a Homebrew upgrade), re-run it.
+</details>
+
+<details>
+<summary>You want a clean slate</summary>
+
+`node cli.js clear` empties the store; `~/.pinpoint/annotations.json` is the only state outside your repo.
+</details>
 
 ## A page to try it on
 
 `demo/index.html` is a self-contained demo site — no build, no network — with the shapes that make
-Pinpoint worth using: a card grid and pricing tiers for region drags, near-identical sibling buttons
-that a selector has to tell apart, a tab panel that rebuilds itself so you can watch pins re-find
-their element, a dense table, and a form.
+Pinpoint worth using: a card grid and pricing tiers for region drags, near-identical sibling buttons, a
+tab panel that rebuilds itself, a dense table, and a form.
 
 ```bash
 cd demo && python3 -m http.server 8080     # then open http://localhost:8080
@@ -308,29 +376,34 @@ cd demo && python3 -m http.server 8080     # then open http://localhost:8080
 cd test && npm install && npx playwright install chromium && npm test
 ```
 
-87 tests. `bridge.test.mjs` (34) runs its own daemon on a scratch port with a temp `PINPOINT_HOME`: validation, filters, the live-event channel, deferred screenshot attachment, the project mirror, loopback/origin guards, persistence across restarts, pruning, every CLI subcommand, hook installation, and every MCP tool over both stdio and Streamable HTTP. `e2e.test.mjs` (53) loads the unpacked extension into headless Chromium and drives real pages: React, Vue, plain HTML with shadow DOM and an iframe, a `default-src 'none'` CSP page, a 3,600-node stress page where every generated selector must resolve back to its own element, DPR 2, cross-tab sync, live resolve, navigating mid-send, switching tabs mid-send, the popup, the on-page bar and its notes list, sticky comment mode, the offline fallback, refusing to load on non-local sites, live agent presence, and a multi-step form that rebuilds its whole DOM with `innerHTML` (where pins must follow their own element or disappear, never silently re-bind to a stranger).
+101 tests. `bridge.test.mjs` covers the daemon, CLI, hooks and every MCP tool over both stdio and
+Streamable HTTP; `e2e.test.mjs` loads the unpacked extension into headless Chromium and drives real pages
+— React, Vue, shadow DOM, an iframe, a strict-CSP page, a 3,600-node stress page, DPR 2, cross-tab sync,
+and a form that rebuilds its whole DOM. See [CONTRIBUTING.md](CONTRIBUTING.md) for what each suite is for.
 
-## Notes on safety and storage
+## Safety and storage
 
-The extension only injects itself into local development pages (see *Where it runs*). The broad `<all_urls>` host permission it asks for is required by Chrome for one thing only — `tabs.captureVisibleTab`, the element screenshot — and a narrower permission does not grant it.
-
-The bridge binds to `127.0.0.1` only, identifies itself with a `service` marker (so the extension can't be fooled by another server on the same port), and refuses any request carrying a web page's `Origin` — only `chrome-extension://` callers and local CLI tools get through. A malicious site therefore can't read your annotations or plant instructions for your agent.
-
-Everything scraped from the page (text, HTML, attributes) is explicitly labelled as untrusted data in what the agent receives; only your typed comment is presented as an instruction.
-
-Screenshots are stored base64-encoded inside `~/.pinpoint/annotations.json` rather than as loose image files, and resolved annotations are pruned past 200 (`PINPOINT_MAX_RESOLVED`). The picture is taken by the extension's worker just after your comment is stored, so hitting Send and immediately switching to your editor keeps both. Because it is taken a moment later, the crop is recorded in **document** coordinates and re-derived against the page's real scroll position at capture time: scroll a little and you still get the right crop, scroll away and the annotation records *why* there is no screenshot rather than attaching a confident picture of somewhere else. The same check catches a navigation mid-capture.
+The bridge binds to `127.0.0.1`, refuses any request carrying a web page's `Origin`, and identifies
+itself with a `service` marker; everything scraped from the page is labelled untrusted where it reaches
+your agent, and only your typed comment is presented as an instruction. Screenshots live base64-encoded
+inside `~/.pinpoint/annotations.json` rather than as loose files. [SECURITY.md](SECURITY.md) has the full
+trust-boundary notes, including why the `<all_urls>` permission is needed, and [PRIVACY.md](PRIVACY.md)
+says exactly what is collected, where it is stored, and the one place it leaves — the coding agent you
+connect it to.
 
 ## Roadmap
 
 - Mobile: same bridge, picker as an overlay in an Expo dev client or Capacitor webview over LAN.
 - CSS source mapping via `chrome.debugger` (which rule set this colour, and where).
 - Page-level annotations — a note about the whole page rather than an element or an area.
-- Firefox: the manifest needs a `scripts` background and a `gecko.id` (see *Which browsers*).
+- Firefox: the manifest needs a `scripts` background and a `gecko.id`.
 - Agent replies on the pin itself, not only in the notes panel.
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). There is no build step: clone it, `npm install` in `bridge/`, load `extension/` unpacked, and you are developing. Every behaviour change should come with a test; the suite is the reason this thing works on pages that rebuild their own DOM.
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). There is no build step:
+clone it, `npm install` in `bridge/`, load `extension/` unpacked, and you are developing. Every behaviour
+change should come with a test.
 
 ## Licence
 
