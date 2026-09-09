@@ -197,11 +197,38 @@ async function finishCapture(tab, capture, id, expectedUrl) {
       }
       // Give the compositor a frame to paint without our overlay before grabbing the pixels.
       await new Promise((r) => setTimeout(r, 60));
+      // Where is the page NOW? capture.rect was measured when Send was pressed; scrolling since
+      // then would leave it pointing at whatever has moved into that spot. Re-derive it from the
+      // document-space rect, which does not move.
+      let rect = capture.rect;
+      if (capture.doc) {
+        // frameId 0 — the top document. Without it this goes to every frame and an iframe can
+        // answer first, reporting its own scroll and its own URL: on a page with an iframe that
+        // made the URL check below fire on every capture.
+        const vp = await chrome.tabs.sendMessage(tab.id, { type: "viewportNow" }, { frameId: 0 }).catch(() => null);
+        // This round trip is itself a window in which the page can navigate — and it did, in the
+        // "page changed" test, which then cropped the new page. The content script reports the URL
+        // it is actually on, so a navigation during the query is caught rather than widened.
+        if (vp && expectedUrl && vp.url && vp.url.split("#")[0] !== expectedUrl.split("#")[0]) {
+          why = "the page changed before it could be taken";
+          return null;
+        }
+        if (vp) {
+          const left = capture.doc.x - vp.x, top = capture.doc.y - vp.y;
+          const w = Math.min(capture.doc.width, vp.w - Math.max(0, left));
+          const h = Math.min(capture.doc.height, vp.h - Math.max(0, top));
+          if (left > vp.w - 2 || top > vp.h - 2 || left + capture.doc.width < 2 || top + capture.doc.height < 2 || w < 2 || h < 2) {
+            why = "the page scrolled away from it before the picture could be taken";
+            return null;
+          }
+          rect = { x: Math.max(0, left), y: Math.max(0, top), width: w, height: h };
+        }
+      }
       try {
-        return await captureElement(tab.windowId, capture.rect, capture.dpr);
+        return await captureElement(tab.windowId, rect, capture.dpr);
       } catch {
         await new Promise((r) => setTimeout(r, 700));
-        return captureElement(tab.windowId, capture.rect, capture.dpr);
+        return captureElement(tab.windowId, rect, capture.dpr);
       }
     });
     // Either way the bridge is told, so nothing silently pretends a picture exists.

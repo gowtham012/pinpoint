@@ -118,18 +118,16 @@ after(async () => { await ctx?.close(); await stopDaemon(); site.close(); fs.rmS
 test("Esc cancels picking; highlight hidden; Esc/Cancel close popover without sending", async () => {
   await clearAll();
   const page = await openPage("/");
-  // This test clicks the page's own nav, which lives top-right — exactly where the bar now sits by
-  // default, so the bar really does intercept it. Park the bar in the far corner: what is under
-  // test here is Esc/Cancel, not placement.
-  // Wait for the corner class to actually be applied first — it arrives after an async
-  // chrome.storage read, so flipping it earlier is simply undone a moment later.
-  await page.waitForFunction(
-    () => document.querySelector("pinpoint-root")?.shadowRoot?.querySelector(".dock")?.classList.contains("pos-tr"),
-    null, { timeout: 8000 }
-  );
+  // This test clicks the page's own nav, which lives top-right — exactly where the bar sits by
+  // default, so it really does intercept the click. Two earlier attempts at getting it out of the
+  // way both raced: the corner class arrives after an async chrome.storage read, and paintDock()
+  // rewrites `display` on every stopPicking(). Hide it in a way nothing else touches — paintDock
+  // only sets `display`, so visibility and pointer-events stick. What is under test here is
+  // Esc/Cancel, not placement.
   await page.evaluate(() => {
     const d = document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock");
-    d.classList.remove("pos-tr"); d.classList.add("pos-bl");
+    d.style.visibility = "hidden";
+    d.style.pointerEvents = "none";
   });
   await arm(page);
   await page.locator("h1").hover();
@@ -709,6 +707,40 @@ test("B2: switching tabs right after Send still gets the screenshot", async () =
   await other.close(); await page.close();
 });
 
+test("scrolling right after Send never attaches a picture of somewhere else", async () => {
+  // Found by using it: the crop was measured in VIEWPORT coordinates when Send was pressed, but
+  // taken later. Scroll in between and those coordinates point at whatever has moved into that
+  // spot — the annotation came back with a confident screenshot of a different part of the page
+  // and screenshotSkipped unset. A wrong picture is worse than none: the agent believes it.
+  await clearAll();
+  const page = await openPage("/");
+  // The fixture is shorter than the viewport, so scrollTo() would be a no-op and the crop would
+  // (correctly) still be right. Give it real room so the element can genuinely leave the screen.
+  await page.evaluate(() => { document.body.style.minHeight = "4000px"; });
+  await arm(page);
+  const h1 = await page.locator("h1").boundingBox();
+  await page.mouse.click(h1.x + h1.width / 2, h1.y + h1.height / 2);
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop").style.display === "block");
+  await page.evaluate(() => {
+    const t = document.querySelector("pinpoint-root").shadowRoot.querySelector("textarea");
+    t.value = "headline note"; t.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  // Send, then immediately scroll far away — what a person does moving to the next note.
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".send").click());
+  await page.evaluate(() => window.scrollTo(0, 1400));
+  await page.waitForTimeout(3500);
+
+  const [a] = await pending();
+  assert.ok(a, "the note itself is never lost");
+  assert.equal(a.comment, "headline note");
+  assert.ok(
+    !a.screenshot,
+    "must not attach a crop taken from wherever the viewport ended up"
+  );
+  assert.match(String(a.screenshotSkipped || ""), /scroll/i, `and must say why, got ${JSON.stringify(a.screenshotSkipped)}`);
+  await page.close();
+});
+
 test("B2b: when a screenshot truly can't be taken, the agent is told so instead of guessing", async () => {
   await clearAll();
   const page = await openPage("/rerender.html");
@@ -1053,6 +1085,11 @@ test("a finished note stays in the panel, showing what the agent said", async ()
   await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 0, null, { timeout: 6000 });
 
   await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".dock .count")?.click());
+  // The panel fetches the finished notes when it opens, so wait for that rather than racing it.
+  await page.waitForFunction(
+    () => !!document.querySelector("pinpoint-root").shadowRoot.querySelector(".panel .item.done"),
+    null, { timeout: 6000 }
+  );
   const panel = await page.evaluate(() => {
     const r = document.querySelector("pinpoint-root").shadowRoot;
     const done = r.querySelector(".panel .item.done");
