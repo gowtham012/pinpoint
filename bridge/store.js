@@ -12,6 +12,23 @@ function empty() {
   return { nextNumber: 1, annotations: [] };
 }
 
+// The page an annotation belongs to, ignoring the fragment — the same key the extension uses to
+// decide which pins belong on screen.
+export const pageKeyOf = (a) => String(a?.page?.url || "").split("#")[0];
+
+// Numbers are per page, so "3" can legitimately exist on several pages at once. Ids are the unique
+// handle and are what an agent is told to use. Match an id exactly; fall back to a number only when
+// it is unambiguous — preferring pending notes, since that is what someone typing a number means.
+// Ambiguous returns null rather than picking one at random.
+export function findAnnotation(db, key) {
+  const byId = (db.annotations || []).find((x) => x.id === key);
+  if (byId) return byId;
+  const hits = (db.annotations || []).filter((x) => String(x.number) === String(key));
+  const pending = hits.filter((x) => x.status !== "resolved");
+  const pool = pending.length ? pending : hits;
+  return pool.length === 1 ? pool[0] : null;
+}
+
 export function load() {
   try {
     const db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));

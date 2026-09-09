@@ -7,7 +7,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp.js";
-import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, summaryLine } from "./store.js";
+import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, summaryLine, findAnnotation, pageKeyOf } from "./store.js";
 
 const MAX_RESOLVED = Number(process.env.PINPOINT_MAX_RESOLVED) || 200;
 
@@ -51,12 +51,16 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     }
   }
 
-  const find = (id) => db.annotations.find((x) => x.id === id || String(x.number) === String(id));
+  const find = (id) => findAnnotation(db, id);
 
   const api = {
     async db() { return db; },
     async add(a) {
-      a.number = db.nextNumber++;
+      // Numbers are per page: your notes on a page read 1, 2, 3 whatever you marked elsewhere.
+      // A single global counter meant the first note on a new site could be #14, which says
+      // nothing to the person looking at it. Ids stay globally unique and are what agents use.
+      const page = pageKeyOf(a);
+      a.number = 1 + db.annotations.reduce((m, x) => (pageKeyOf(x) === page ? Math.max(m, x.number || 0) : m), 0);
       a.status = "pending";
       a.receivedAt = new Date().toISOString();
       db.annotations.push(a);
@@ -95,8 +99,10 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     },
     async remove(id) {
       const before = db.annotations.length;
-      const gone = db.annotations.find((x) => x.id === id || String(x.number) === String(id));
-      db.annotations = db.annotations.filter((x) => x.id !== id && String(x.number) !== String(id));
+      // Delete exactly the one resolved, by id. Filtering on the number would have removed that
+      // number from every page at once now that numbering is per page.
+      const gone = findAnnotation(db, id);
+      if (gone) db.annotations = db.annotations.filter((x) => x.id !== gone.id);
       persist();
       if (gone) log(`removed: #${gone.number} ${gone.comment}`);
       return db.annotations.length < before;

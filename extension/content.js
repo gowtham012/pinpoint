@@ -14,6 +14,7 @@
   let selected = null;
   let pins = []; // { id, number, selector, comment, el }
   let replies = []; // resolved annotations for this page, with what the agent said back
+  let pickChain = [], pickIndex = 0; // the element stack under the last click, and where we sit in it
 
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   const K_SEND = MAC ? "\u2318\u21a9" : "Ctrl+Enter";
@@ -209,6 +210,14 @@
       }
       .pop textarea::placeholder { color: var(--ink-dim); }
       .pop textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+      /* Clicking is a guess: the element under the pointer can be far bigger or smaller than the
+         thing you meant. These walk the stack at the point you clicked, so you can correct it. */
+      .pop .scope { display: flex; gap: 5px; align-items: center; margin: -2px 0 8px; }
+      .pop .scope button { font: 500 11px var(--sans); color: var(--ink-dim); background: var(--surface-2);
+                           border-radius: 6px; padding: 4px 8px; line-height: 1; }
+      .pop .scope button:hover:not(:disabled) { color: var(--ink); }
+      .pop .scope button:disabled { opacity: .35; cursor: default; }
+      .pop .scope-hint { font: 10px/1 var(--mono); color: var(--ink-dim); margin-left: auto; }
       .pop .row2 { display: flex; gap: 6px; margin-top: 9px; align-items: center; }
       .pop .row2 button { border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 600; }
       .pop .send { background: var(--accent); color: var(--accent-ink); display: inline-flex; gap: 7px; align-items: center; }
@@ -316,6 +325,11 @@
 
     <div class="pop">
       <div class="meta"></div>
+      <div class="scope">
+        <button class="wider" title="Select the element around this one">↑ wider</button>
+        <button class="narrower" title="Select the element inside this one">↓ narrower</button>
+        <span class="scope-hint"></span>
+      </div>
       <textarea rows="3"></textarea>
       <div class="row2">
         <button class="send">Send<kbd></kbd></button>
@@ -349,6 +363,10 @@
     dockClose: shadow.querySelector(".dock .close"),
     pop: shadow.querySelector(".pop"),
     meta: shadow.querySelector(".pop .meta"),
+    scope: shadow.querySelector(".pop .scope"),
+    wider: shadow.querySelector(".pop .wider"),
+    narrower: shadow.querySelector(".pop .narrower"),
+    scopeHint: shadow.querySelector(".pop .scope-hint"),
     text: shadow.querySelector(".pop textarea"),
     send: shadow.querySelector(".pop .send"),
     sendKbd: shadow.querySelector(".pop .send kbd"),
@@ -894,6 +912,7 @@
     if (!t) return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    setPickChain(e.clientX, e.clientY, t);
     selected = t;
     stopPicking();
     moveHighlight(t, "selected");
@@ -1008,6 +1027,7 @@
       contains: inside.map((el) => ({ tag: el.tagName.toLowerCase(), selector: uniqueSelector(el), text: clip(el.innerText || "", 60) })),
     };
     stopPicking();
+    setPickChain(box.left + box.width / 2, box.top + box.height / 2, anchor);
     moveHighlight(anchor, "selected");
     openPopover(anchor, selectedRegion);
   }, true);
@@ -1050,15 +1070,7 @@
       ? { left: region.x - window.scrollX, top: region.y - window.scrollY,
           right: region.x - window.scrollX + region.width, bottom: region.y - window.scrollY + region.height }
       : el.getBoundingClientRect();
-    const hint = sourceHint(el);
-    const comp = hint.components[0] ? `<b>&lt;${hint.components[0]}&gt;</b> ` : "";
-    const file = hint.file ? ` · ${hint.file}${hint.line ? ":" + hint.line : ""}` : "";
-    const label = clip(el.innerText || el.getAttribute("aria-label") || el.getAttribute("placeholder") || "", 46);
-    ui.meta.innerHTML = region
-      ? `<div class="row"><b>Region</b> ${region.width}×${region.height} in ${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
-        `<div class="picked">${region.contains.length} element${region.contains.length === 1 ? "" : "s"} inside</div>`
-      : `<div class="row">${comp}${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
-        (label ? `<div class="picked">“${escapeHtml(label)}”</div>` : "");
+    paintMeta(el, region);
     ui.text.value = "";
     ui.status.textContent = "";
     ui.status.className = "status";
@@ -1074,18 +1086,75 @@
       : `What should change here? e.g. make this button full-width on mobile — ${K_SEND} to send`;
     setTimeout(() => ui.text.focus(), 0);
   }
+  // The elements under a point, innermost first — the same list devtools walks. Anything of ours is
+  // excluded, and <html> is not a useful thing to annotate.
+  function setPickChain(x, y, chosen) {
+    const stack = (document.elementsFromPoint(x, y) || [])
+      .filter((el) => el && el.nodeType === 1 && !isOurs(el) && el !== document.documentElement);
+    pickChain = stack.length ? stack : chosen ? [chosen] : [];
+    const i = pickChain.indexOf(chosen);
+    if (i >= 0) pickIndex = i;
+    else { pickChain = chosen ? [chosen, ...pickChain] : pickChain; pickIndex = 0; }
+  }
+
+  // What the popover says about the thing you picked. Split out of openPopover so retargeting can
+  // repaint it without wiping whatever you have already typed.
+  function paintMeta(el, region) {
+    const hint = sourceHint(el);
+    const comp = hint.components[0] ? `<b>&lt;${hint.components[0]}&gt;</b> ` : "";
+    const file = hint.file ? ` · ${hint.file}${hint.line ? ":" + hint.line : ""}` : "";
+    const label = clip(el.innerText || el.getAttribute("aria-label") || el.getAttribute("placeholder") || "", 46);
+    ui.meta.innerHTML = region
+      ? `<div class="row"><b>Region</b> ${region.width}×${region.height} in ${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
+        `<div class="picked">${region.contains.length} element${region.contains.length === 1 ? "" : "s"} inside</div>`
+      : `<div class="row">${comp}${escapeHtml(describe(el))}${escapeHtml(file)}</div>` +
+        (label ? `<div class="picked">“${escapeHtml(label)}”</div>` : "");
+    const many = pickChain.length > 1;
+    ui.scope.style.display = many ? "flex" : "none";
+    ui.narrower.disabled = pickIndex <= 0;
+    ui.wider.disabled = pickIndex >= pickChain.length - 1;
+    ui.scopeHint.textContent = many ? `${pickIndex + 1}/${pickChain.length} · ⌥↑↓` : "";
+  }
+
+  // Clicking is a guess. On this page, a few pixels off the headline is the difference between a
+  // 567×113 <h1> and the 1120×662 block holding the whole hero — with nothing in between. So keep
+  // the stack under the click point and let it be corrected.
+  function retarget(delta) {
+    const next = pickIndex + delta;
+    if (next < 0 || next >= pickChain.length) return;
+    pickIndex = next;
+    selected = pickChain[pickIndex];
+    if (selectedRegion) {
+      // The box stays where it was drawn; its offset is recorded inside whatever now anchors it.
+      const ar = selected.getBoundingClientRect();
+      selectedRegion.dx = Math.round(selectedRegion.x - window.scrollX - ar.left);
+      selectedRegion.dy = Math.round(selectedRegion.y - window.scrollY - ar.top);
+    }
+    moveHighlight(selected, "selected");
+    paintMeta(selected, selectedRegion);
+  }
+
   function hidePopover() {
     selectedRegion = null;
+    pickChain = []; pickIndex = 0;
     escArmed = false;
     ui.pop.style.display = "none";
     selected = null;
     moveHighlight(null);
   }
+  ui.wider.addEventListener("click", (e) => { e.preventDefault(); retarget(1); ui.text.focus(); });
+  ui.narrower.addEventListener("click", (e) => { e.preventDefault(); retarget(-1); ui.text.focus(); });
   ui.cancel.addEventListener("click", () => { hidePopover(); startPicking(); });
   ui.text.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       submit();
+    }
+    // Widen or narrow without leaving the keyboard. Alt is the modifier because the plain arrows
+    // belong to the textarea.
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      retarget(e.key === "ArrowUp" ? 1 : -1);
     }
     e.stopPropagation();
   });

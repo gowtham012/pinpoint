@@ -71,6 +71,12 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
   transition is gone.
 
 ### Changed
+- **Note numbers are per page.** One global counter meant the first note on a new site could read
+  "#14", which tells the person looking at it nothing. Each page now numbers from 1, matching the
+  pins on screen, the panel titled "Notes on this page", and the counter. Ids stay globally unique
+  and remain what an agent resolves by; a number still works as a convenience while it names one
+  note, and resolves nothing when it does not — `DELETE /annotations/1` would previously have
+  deleted #1 from every page in the store.
 - **The bar now opens in the top-right corner** rather than bottom-left, and the popup's corner
   picker opens on the same default.
 - **Two hues in the bar instead of three.** "You" was `#a8577f`, a mauve unrelated to anything

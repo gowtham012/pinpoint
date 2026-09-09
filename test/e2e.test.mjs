@@ -662,6 +662,66 @@ test("B1: after a full re-render, pins stay on their own element or disappear �
   await page.close();
 });
 
+test("what you picked can be widened and narrowed after the fact", async () => {
+  // Clicking is a guess, and both ways of being wrong showed up in real use: a checkbox row picked
+  // its inner <span>, and a few pixels off a heading picked the whole hero — 567x113 to 1120x662
+  // with nothing in between. So the pick is adjustable along the stack under the click point.
+  await clearAll();
+  const page = await openPage("/");
+  await arm(page);
+  const h1 = await page.locator("h1").boundingBox();
+  await page.mouse.click(h1.x + h1.width / 2, h1.y + h1.height / 2);
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop").style.display === "block");
+
+  // .hl animates over 60ms, so measuring it immediately reads the previous size.
+  const read = async () => (await page.waitForTimeout(140), page.evaluate(() => {
+    const r = document.querySelector("pinpoint-root").shadowRoot;
+    const hl = r.querySelector(".hl").getBoundingClientRect();
+    return { meta: r.querySelector(".pop .meta").textContent.trim(),
+             hint: r.querySelector(".pop .scope-hint").textContent,
+             w: Math.round(hl.width),
+             canNarrow: !r.querySelector(".pop .narrower").disabled,
+             canWiden: !r.querySelector(".pop .wider").disabled };
+  }));
+
+  const first = await read();
+  assert.match(first.hint, /1\/\d/, "it says where you are in the stack");
+  assert.equal(first.canNarrow, false, "nothing inside the innermost pick");
+  assert.equal(first.canWiden, true);
+
+  // widen: the highlight must actually grow onto a real ancestor
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop .wider").click());
+  const wider = await read();
+  assert.ok(wider.w > first.w + 20, `widening should select something bigger: ${first.w} -> ${wider.w}`);
+  assert.match(wider.hint, /2\/\d/);
+  assert.equal(wider.canNarrow, true);
+
+  // and back again, to exactly what it was
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop .narrower").click());
+  const back = await read();
+  assert.equal(back.w, first.w, "narrowing returns to the original pick");
+  assert.equal(back.meta, first.meta);
+
+  // typing survives an adjustment — the meta repaints, the comment does not
+  await page.evaluate(() => {
+    const t = document.querySelector("pinpoint-root").shadowRoot.querySelector("textarea");
+    t.value = "half typed"; t.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop .wider").click());
+  assert.equal(
+    await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector("textarea").value),
+    "half typed", "adjusting must not wipe what you have written"
+  );
+
+  // and what gets sent is the adjusted element, not the original
+  await page.evaluate(() => document.querySelector("pinpoint-root").shadowRoot.querySelector(".send").click());
+  await page.waitForFunction(() => document.querySelector("pinpoint-root").shadowRoot.querySelectorAll(".pin").length === 1, null, { timeout: 6000 });
+  const [a] = await pending();
+  assert.notEqual(a.element.selector, "h1", `should have sent the widened element, got ${a.element.selector}`);
+  assert.ok(a.element.rect.width > h1.width, "and it is the bigger one");
+  await page.close();
+});
+
 test("B4: the popover shows the text of what you picked, and distinguishes near-identical buttons", async () => {
   const page = await openPage("/rerender.html");
   await arm(page);

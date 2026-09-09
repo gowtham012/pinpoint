@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown } from "./store.js";
+import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, findAnnotation } from "./store.js";
 
 const SELF = fileURLToPath(import.meta.url);
 
@@ -185,7 +185,7 @@ switch (cmd) {
     let ok = 0;
     // The note is the developer's answer, shown in their browser next to what they asked for.
     const note = opt("note", null);
-    for (const id of ids) (await resolveOne(id, note)) ? ok++ : console.error(`no annotation "${id}"`);
+    for (const id of ids) (await resolveOne(id, note)) ? ok++ : console.error(`no annotation "${id}" — numbers are per page, so use the id if the same number exists on more than one page`);
     console.error(`[pinpoint] resolved ${ok}/${ids.length}`);
     process.exitCode = ok === ids.length ? 0 : 1;
     break;
@@ -237,7 +237,7 @@ async function resolveOne(id, note) {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note }),
   })).ok;
   const db = load();
-  const a = db.annotations.find((x) => x.id === id || String(x.number) === String(id));
+  const a = findAnnotation(db, id);
   if (!a) return false;
   a.status = "resolved";
   a.resolvedAt = new Date().toISOString();
