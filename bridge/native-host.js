@@ -67,6 +67,27 @@ function targets(root, platform) {
     .map(([name, rel]) => ({ name, file: path.join(base, rel, "NativeMessagingHosts", `${HOST_NAME}.json`) }));
 }
 
+// How to reach each browser from a terminal: its macOS app name, its Linux binaries, and the page
+// where "Load unpacked" lives. Keyed by the same names as BROWSERS above.
+export const BROWSER_UI = {
+  Chrome: { app: "Google Chrome", bin: ["google-chrome", "google-chrome-stable"], url: "chrome://extensions" },
+  "Chrome Beta": { app: "Google Chrome Beta", bin: ["google-chrome-beta"], url: "chrome://extensions" },
+  "Chrome Canary": { app: "Google Chrome Canary", bin: [], url: "chrome://extensions" },
+  Chromium: { app: "Chromium", bin: ["chromium", "chromium-browser"], url: "chrome://extensions" },
+  Brave: { app: "Brave Browser", bin: ["brave-browser", "brave"], url: "brave://extensions" },
+  Edge: { app: "Microsoft Edge", bin: ["microsoft-edge", "microsoft-edge-stable"], url: "edge://extensions" },
+  Arc: { app: "Arc", bin: [], url: "chrome://extensions" },
+  Vivaldi: { app: "Vivaldi", bin: ["vivaldi", "vivaldi-stable"], url: "vivaldi://extensions" },
+  Opera: { app: "Opera", bin: ["opera"], url: "opera://extensions" },
+};
+
+// Which Chromium browsers are actually installed. Same detection as the native host install — a
+// browser is present if its profile directory is — so setup offers exactly the browsers that can
+// take the extension, and an empty list is an answer rather than a crash.
+export function detectBrowsers({ platform = process.platform, root = null } = {}) {
+  return (targets(root, platform) || []).map((t) => ({ name: t.name, ...(BROWSER_UI[t.name] || {}) }));
+}
+
 export function installNativeHost({
   root = null,
   platform = process.platform,

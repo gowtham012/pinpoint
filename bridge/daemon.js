@@ -211,6 +211,9 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     });
   }
 
+  // Set the first time the extension talks to us; read back from /health.
+  let extensionSeenAt = null;
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     const p = url.pathname;
@@ -226,6 +229,9 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     if (origin && !/^(chrome|moz|safari-web)-extension:\/\//.test(origin)) {
       return json(res, 403, { error: "origin not allowed" });
     }
+    // Anything that gets past that check with an Origin at all is the extension. Recording when we
+    // last heard from it is what lets `cli.js setup` say "it is loaded" instead of "now go and load it".
+    if (origin) extensionSeenAt = new Date().toISOString();
 
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
@@ -252,7 +258,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       if (p === "/" || p === "/health") {
         return json(res, 200, {
           service: "pinpoint-bridge", ok: true, version: 1, port, project,
-          pending: pending(db).length, dataFile: DATA_FILE, storeVersion: version, agent: api.agent(),
+          pending: pending(db).length, dataFile: DATA_FILE, storeVersion: version, agent: api.agent(), extensionSeenAt,
           agents: api.agents(), cliPath: CLI_PATH, restartable, pid: process.pid,
         });
       }

@@ -841,3 +841,116 @@ test("POST /restart brings the bridge back with its annotations, flags and block
   fs.rmSync(proj, { recursive: true, force: true });
   fs.rmSync(home, { recursive: true, force: true });
 });
+
+// ---------- setup: the two-command install ----------
+
+test("writeCursorMcp creates the file, keeps other servers and is idempotent", async () => {
+  const { writeCursorMcp, mcpCommand } = await import("../bridge/agents.js");
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), "pp-cursor-"));
+  const file = path.join(proj, ".cursor/mcp.json");
+
+  const r1 = writeCursorMcp(proj, CLI, {});
+  assert.equal(r1.already, false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).mcpServers.pinpoint, mcpCommand(CLI, {}));
+
+  // someone else's server must survive ours being added twice
+  const cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+  cfg.mcpServers.other = { command: "node", args: ["/x.js"] };
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
+
+  const r2 = writeCursorMcp(proj, CLI, { port: 7444 });
+  assert.equal(r2.already, true);
+  const after = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(after.mcpServers.other, { command: "node", args: ["/x.js"] });
+  assert.deepEqual(after.mcpServers.pinpoint.args.slice(-2), ["--port", "7444"]);
+  assert.equal(Object.keys(after.mcpServers).length, 2, "no duplicate pinpoint entry");
+
+  fs.writeFileSync(file, "{ broken");
+  assert.throws(() => writeCursorMcp(proj, CLI, {}), /not valid JSON/);
+  fs.rmSync(proj, { recursive: true, force: true });
+});
+
+test("writeCodexMcp appends once, backs the file up and never doubles the block", async () => {
+  const { writeCodexMcp } = await import("../bridge/agents.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pp-codex-"));
+  const file = path.join(dir, "config.toml");
+  fs.writeFileSync(file, "[other]\nkey = 1\n");
+
+  const r1 = writeCodexMcp(CLI, { file });
+  assert.equal(r1.already, false);
+  assert.equal(fs.readFileSync(r1.backup, "utf8"), "[other]\nkey = 1\n", "their file is kept as it was");
+  const written = fs.readFileSync(file, "utf8");
+  assert.match(written, /\[other\]/);
+  assert.match(written, /\[mcp_servers\.pinpoint\]/);
+  assert.match(written, new RegExp(`args = \\[${JSON.stringify(CLI).replace(/[\\/]/g, "\\$&")}, "mcp"\\]`));
+
+  const r2 = writeCodexMcp(CLI, { file });
+  assert.equal(r2.already, true);
+  assert.equal(fs.readFileSync(file, "utf8").match(/\[mcp_servers\.pinpoint\]/g).length, 1);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("detectBrowsers lists only the browsers that are actually installed", async () => {
+  const { detectBrowsers } = await import("../bridge/native-host.js");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-browsers-"));
+  assert.deepEqual(detectBrowsers({ platform: "darwin", root }), [], "nothing installed is an answer, not a crash");
+
+  fs.mkdirSync(path.join(root, "BraveSoftware/Brave-Browser"), { recursive: true });
+  const found = detectBrowsers({ platform: "darwin", root });
+  assert.deepEqual(found.map((b) => b.name), ["Brave"]);
+  assert.equal(found[0].url, "brave://extensions", "setup needs the page where Load unpacked lives");
+  assert.equal(detectBrowsers({ platform: "sunos", root }).length, 0);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("/health reports when the extension last talked to us, so setup can confirm it is loaded", async () => {
+  const before = await (await fetch(BASE + "/health")).json();
+  assert.equal(before.extensionSeenAt, null, "a CLI call is not the extension");
+
+  await fetch(BASE + "/health", { headers: { origin: "chrome-extension://abcdefghijklmnop" } });
+  const after = await (await fetch(BASE + "/health")).json();
+  assert.ok(after.extensionSeenAt, "an extension-origin request marks it live");
+  assert.ok(!Number.isNaN(Date.parse(after.extensionSeenAt)));
+});
+
+test("setup wires a project up in one non-interactive run, twice over", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "pp-setup-home-"));
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), "pp-setup-proj-"));
+  // HOME as well as PINPOINT_HOME: setup writes agent config and native-host manifests under it,
+  // and a test that edited the developer's own ~/.claude.json would be a bug worth shipping never.
+  const env = { ...process.env, HOME, USERPROFILE: home, PINPOINT_HOME: path.join(home, ".pinpoint") };
+  const run = (args, cwd = undefined) => new Promise((res) => {
+    const p = spawn("node", [CLI, "setup", "--yes", "--no-start", "--port", "7401", ...args], { env, cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "", err = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (err += d));
+    const t = setTimeout(() => { p.kill(); res({ err, code: "HUNG" }); }, 60000);
+    p.once("exit", (c) => { clearTimeout(t); res({ out, err, code: c }); });
+  });
+
+  const first = await run([proj]);
+  assert.equal(first.code, 0, first.err);
+  assert.match(first.err, /Load unpacked|no such|Pinpoint setup/);
+  const settings = path.join(proj, ".claude/settings.json");
+  assert.ok(fs.existsSync(settings), "hooks land without being asked");
+  assert.match(fs.readFileSync(settings, "utf8"), /print --hook/);
+
+  const second = await run([proj]);
+  assert.equal(second.code, 0, second.err);
+  const s = JSON.parse(fs.readFileSync(settings, "utf8"));
+  assert.equal(s.hooks.UserPromptSubmit.length, 1, "running setup twice does not duplicate anything");
+
+  const bad = await run([path.join(proj, "nope")]);
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /no such directory/);
+  assert.doesNotMatch(bad.err, /at .*\.js:\d+/, "a first-timer gets a sentence, not a stack trace");
+
+  // Standing in the pinpoint clone itself, with no terminal to ask: fail fast with an instruction,
+  // rather than wiring hooks into Pinpoint's own repo or waiting on a stdin that never comes.
+  const nothing = await run([], path.resolve(here, ".."));
+  assert.equal(nothing.code, 1);
+  assert.match(nothing.err, /no project given/);
+
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(proj, { recursive: true, force: true });
+});

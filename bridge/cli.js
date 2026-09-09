@@ -8,6 +8,7 @@ const SELF = fileURLToPath(import.meta.url);
 const USAGE = `pinpoint — send UI change requests from your browser to your coding agent
 
 Usage
+  node cli.js setup [dir]              set everything up, asking as it goes (start here)
   node cli.js [start]                  start the bridge (browser <-> agent). Leave it running.
   node cli.js mcp                      run as a stdio MCP server (for Claude Code / Cursor / Codex)
   node cli.js print                    print pending annotations as markdown
@@ -25,12 +26,15 @@ Options
   --quiet           no log output
   --uninstall       (with install-native-host) remove it again
   --id <id>         (with install-native-host) also allow this extension id
+  --yes             (with setup) take every default instead of asking
+  --no-start        (with setup) wire everything up but do not start the bridge
 
 Files
   ${DATA_FILE}   annotations (screenshots inline, no loose image files)
   $PINPOINT_HOME overrides that location
 
 Examples
+  node cli.js setup
   node cli.js --project ~/code/my-app
   claude mcp add pinpoint -s user -- node ${SELF} mcp
 `;
@@ -38,7 +42,7 @@ Examples
 const args = process.argv.slice(2);
 // The subcommand may sit after flags (`--port 7332 status`), so find it wherever it is rather
 // than only at position 0 — otherwise a flag-first invocation silently starts a daemon instead.
-const CMDS = ["start", "mcp", "print", "resolve", "install-hooks", "install-native-host", "status", "clear", "help"];
+const CMDS = ["setup", "start", "mcp", "print", "resolve", "install-hooks", "install-native-host", "status", "clear", "help"];
 const VALUE_FLAGS = ["--port", "--project"];
 function pickCommand() {
   // A leading positional is the command, whatever it is — so an unknown one still reports itself
@@ -61,7 +65,7 @@ function positionals() {
   const out = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
-      if (args[i + 1] && !args[i + 1].startsWith("--") && !["print", "consume", "quiet", "hook", "uninstall"].includes(args[i].slice(2))) i++;
+      if (args[i + 1] && !args[i + 1].startsWith("--") && !["print", "consume", "quiet", "hook", "uninstall", "yes", "no-start"].includes(args[i].slice(2))) i++;
       continue;
     }
     out.push(args[i]);
@@ -92,6 +96,23 @@ switch (cmd) {
   case "help":
     process.stdout.write(USAGE);
     break;
+
+  case "setup": {
+    const { runSetup } = await import("./setup.js");
+    const ids = args.reduce((a, x, i) => (x === "--id" && args[i + 1] ? [...a, args[i + 1]] : a), []);
+    try {
+      await runSetup({
+        project: positionals()[0] || opt("project", null),
+        port, yes: flag("yes"), start: !flag("no-start"), ids,
+      });
+    } catch (e) {
+      // Same contract as install-hooks: a readable sentence, never a stack trace at the moment a
+      // first-timer is deciding whether this thing works.
+      console.error(`[pinpoint] ${e.message}`);
+      process.exit(1);
+    }
+    break;
+  }
 
   case "start": {
     const { startDaemon } = await import("./daemon.js");
