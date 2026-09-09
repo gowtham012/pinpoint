@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Pinpoint mark: a click. An open ring, the burst of the press, and the cursor that made it.
+       Drawn rather than traced from the raster, so it holds together at 16px and has transparency.
+       Ring centre (52,52) r=40, stroke 13 — its inner edge sits at 33.5, and the burst stops at 26,
+       which is what keeps the two from reading as one gear-like shape. -->
+  <g stroke="#6d5ae6" fill="none" stroke-linecap="round">
+    <!-- open to the lower right, where the cursor comes through -->
+    <path d="M 76.6 20.3 A 40 40 0 1 0 70.8 86.9" stroke-width="13" />
+    <!-- five marks radiating from the click point -->
+    <g stroke-width="9.5">
+      <path d="M 52 38 V 26" />
+      <path d="M 42.1 42.1 L 33.6 33.6" />
+      <path d="M 38 52 H 26" />
+      <path d="M 42.1 61.9 L 33.6 70.4" />
+      <path d="M 61.9 42.1 L 70.4 33.6" />
+    </g>
+  </g>
+
+  <!-- The cursor, tip on the click point, reaching out past the ring's opening. -->
+  <path d="M 0 0 L 0 64 L 18 50 L 30 76 L 41 71 L 29 46 L 49 44 Z"
+        transform="translate(54 50) rotate(-6)"
+        fill="#ffffff" stroke="#6d5ae6" stroke-width="10" stroke-linejoin="round" />
+</svg>
