@@ -8,7 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
+### Added
+- **Start and restart the bridge from the browser.** `node cli.js install-native-host` registers a
+  small native messaging launcher with every Chromium-based browser on the machine; after that the
+  popup's **Start bridge** button really starts the process, and while the bridge is running that
+  button and the new **↻** in the on-page bar restart it — so picking up a new build no longer
+  means going back to a terminal. The launcher can run exactly one thing, this repo's own `cli.js`,
+  on a port taken from the popup's own setting: no path, command or project directory crosses that
+  boundary. Restart is plain HTTP to the bridge itself, so it needs no launcher and works in Safari.
+  macOS and Linux only; on Windows the bridge still starts in a terminal.
+- **`/health` reports `cliPath`**, so the popup can print the real command to run instead of a
+  `<pinpoint>` placeholder nobody can copy.
+- **Agents are told apart.** The MCP handshake carries each client's own name, so with more than one
+  connected the bar names the agent that is working (`claude-code`, `cursor-vscode`, `codex`) rather
+  than saying "your agent", and each reply in the notes panel is attributed to whoever wrote it
+  (`resolvedBy`).
+
+### Changed
+- **The extension now pins its id** with a manifest `key`, because native messaging must whitelist
+  an exact id and an unpinned one is derived from the install path. **If you already have Pinpoint
+  loaded, reload it once** — the id changes, so the popup's port and corner reset to their defaults
+  and, if you had turned on *"Allow access to file URLs"*, you must turn it back on. Remove the old
+  entry from `chrome://extensions` afterwards. (If Pinpoint is ever submitted to the Chrome Web
+  Store, this key must be stripped from the uploaded zip.)
+
 ### Fixed
+- **Two agents watching at once both got the same note.** `wait_for_annotation` woke every blocked
+  waiter with the same annotation, so they duplicated the work and the second `resolve_annotation`
+  silently replaced the first agent's reply. Each new note now goes to exactly one waiter, and
+  resolving something another agent already finished says so instead of overwriting it quietly.
+- **Restarting the bridge froze the pins for 25 seconds at a time.** The extension long-polls
+  `/events?since=<n>`, and a restarted bridge starts counting from 1 again — so every poll from a
+  client that was ahead sat out the full timeout before returning. A client from a previous life is
+  answered at once.
 - **The agent's replies were unreachable, so a finished note looked deleted.** The bar's counter is
   the only way into the notes panel, and it hid itself whenever nothing was pending — so the moment
   an agent finished the last note, the reply it had just written could never be opened. The counter

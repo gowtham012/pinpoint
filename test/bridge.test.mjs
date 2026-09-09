@@ -608,3 +608,236 @@ test("hooks: a path with a space stays quoted, and unrelated hooks survive", asy
   assert.equal(ours.length, 1, "re-running must not duplicate our hook");
   assert.equal(after2.hooks.UserPromptSubmit.length, 2, "user hook + ours");
 });
+
+// ---------------------------------------------------------------------------
+// Starting the bridge from the browser, and telling agents apart.
+// ---------------------------------------------------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const postJson = async (p, body) => (await fetch(BASE + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+
+test("/health names the bridge's own launch command, so the extension can print a real one", async () => {
+  const h = await (await fetch(BASE + "/health")).json();
+  assert.ok(h.cliPath, "health must carry cliPath");
+  assert.ok(fs.existsSync(h.cliPath), `${h.cliPath} should exist`);
+  assert.equal(path.basename(h.cliPath), "cli.js");
+  assert.equal(h.restartable, true, "a daemon started by cli.js owns its process");
+  assert.ok(h.pid > 0);
+});
+
+test("install-native-host: writes one manifest per detected browser, unions, uninstalls", async () => {
+  const { installNativeHost, extensionId, HOST_NAME } = await import("../bridge/native-host.js");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-nmh-"));
+  // Detection is "the browser's own directory exists" — Chrome and Brave here, Edge deliberately not.
+  fs.mkdirSync(path.join(root, "Google/Chrome"), { recursive: true });
+  fs.mkdirSync(path.join(root, "BraveSoftware/Brave-Browser"), { recursive: true });
+  const wrapperPath = path.join(root, "pinpoint-host.sh");
+  const opts = { root, platform: "darwin", wrapperPath, home: HOME };
+
+  const r = installNativeHost(opts);
+  assert.equal(r.files.length, 2, "Chrome and Brave, not Edge");
+  assert.ok(!fs.existsSync(path.join(root, "Microsoft Edge")), "must never create a browser directory");
+
+  const manifestKey = JSON.parse(fs.readFileSync(path.resolve(here, "../extension/manifest.json"), "utf8")).key;
+  const id = extensionId(manifestKey);
+  const written = JSON.parse(fs.readFileSync(r.files[0], "utf8"));
+  assert.equal(written.name, HOST_NAME);
+  assert.equal(path.basename(r.files[0]), `${HOST_NAME}.json`, "filename must equal the host name");
+  assert.equal(written.type, "stdio");
+  assert.deepEqual(written.allowed_origins, [`chrome-extension://${id}/`]);
+  assert.equal(written.path, wrapperPath);
+  assert.ok(path.isAbsolute(written.path));
+  assert.ok(fs.statSync(wrapperPath).mode & 0o111, "the wrapper must be executable");
+  assert.ok(!/\bexec node\b/.test(fs.readFileSync(wrapperPath, "utf8")),
+    "a browser-launched host has no shell PATH, so node must be an absolute path");
+
+  // Idempotent, and a second checkout must not evict the first.
+  const before = fs.readFileSync(r.files[0], "utf8");
+  installNativeHost(opts);
+  assert.equal(fs.readFileSync(r.files[0], "utf8"), before, "re-running must be byte-identical");
+  installNativeHost({ ...opts, ids: ["aaaabbbbccccddddeeeeffffgggghhhh"] });
+  const unioned = JSON.parse(fs.readFileSync(r.files[0], "utf8"));
+  assert.equal(unioned.allowed_origins.length, 2, "a second id is added, not swapped in");
+  assert.ok(unioned.allowed_origins.includes(`chrome-extension://${id}/`));
+
+  const gone = installNativeHost({ ...opts, uninstall: true });
+  assert.equal(gone.removed.length, 3, "two manifests and the wrapper");
+  assert.ok(!fs.existsSync(r.files[0]) && !fs.existsSync(wrapperPath));
+  assert.match(installNativeHost({ ...opts, uninstall: true }).message, /nothing to remove/);
+
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "pp-nmh-empty-"));
+  assert.throws(() => installNativeHost({ ...opts, root: empty }), /no Chromium-based browser/);
+  assert.throws(() => installNativeHost({ ...opts, platform: "win32" }), /Windows/);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(empty, { recursive: true, force: true });
+});
+
+// The browser→host hop itself is not testable here (Playwright's Chromium reads the real
+// user-level NativeMessagingHosts directory, and a test must not write there). Everything on
+// either side of it is: this drives the host directly over its own stdio protocol.
+const NMH_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "pp-host-"));
+let WRAPPER = null;
+function nativeFrame(obj) {
+  const body = Buffer.from(JSON.stringify(obj), "utf8");
+  const head = Buffer.alloc(4);
+  head.writeUInt32LE(body.length, 0);
+  return Buffer.concat([head, body]);
+}
+async function askHost(payload, env = null) {
+  const p = spawn(WRAPPER, [], { env: env || ENV, stdio: ["pipe", "pipe", "pipe"] });
+  p.stdin.end(Buffer.isBuffer(payload) ? payload : nativeFrame(payload));
+  const out = [];
+  p.stdout.on("data", (c) => out.push(c));
+  p.stderr.on("data", () => {});
+  const code = await new Promise((r) => p.once("close", r));
+  const buf = Buffer.concat(out);
+  if (buf.length < 4) return { code, reply: null };
+  return { code, reply: JSON.parse(buf.subarray(4, 4 + buf.readUInt32LE(0)).toString("utf8")) };
+}
+
+test("native host: answers ping, and finds node without a shell PATH", async () => {
+  const { installNativeHost } = await import("../bridge/native-host.js");
+  fs.mkdirSync(path.join(NMH_ROOT, "Google/Chrome"), { recursive: true });
+  WRAPPER = path.join(NMH_ROOT, "pinpoint-host.sh");
+  installNativeHost({ root: NMH_ROOT, platform: "darwin", wrapperPath: WRAPPER, home: HOME });
+
+  const { reply } = await askHost({ cmd: "ping" });
+  assert.equal(reply.ok, true);
+  assert.ok(fs.existsSync(reply.cli), "ping must point at a cli.js that is really there");
+
+  // Exactly the environment a browser gives it: launchd's PATH, no shell rc, no nvm shims.
+  const bare = await askHost({ cmd: "ping" }, { PATH: "/usr/bin:/bin", HOME: process.env.HOME });
+  assert.equal(bare.reply?.ok, true, "the wrapper must not depend on the user's PATH");
+});
+
+test("native host: one integer crosses the boundary, and nothing else", async () => {
+  for (const port of ["7331; ls", 80, 7331.5, null, 99999]) {
+    const { reply } = await askHost({ cmd: "start", port });
+    assert.equal(reply.ok, false, `port ${JSON.stringify(port)} must be refused`);
+    assert.equal(reply.code, "bad_port");
+  }
+  // No path, script or command name is honoured — there is exactly one thing this host can run.
+  const evil = path.join(NMH_ROOT, "evil.js");
+  fs.writeFileSync(evil, `require("fs").writeFileSync(${JSON.stringify(evil + ".ran")}, "x")`);
+  for (const msg of [{ cmd: "exec", path: "/bin/sh" }, { cmd: "stop" }, {}]) {
+    const { reply } = await askHost(msg);
+    assert.equal(reply.ok, false);
+    assert.equal(reply.code, "bad_request", `${JSON.stringify(msg)} must be refused`);
+  }
+  // A well-formed start carrying extra fields ignores them: only the port is ever read.
+  assert.equal((await askHost({ cmd: "start", cli: evil, project: "/etc" })).reply.code, "bad_port");
+  assert.ok(!fs.existsSync(evil + ".ran"), "a path in the message must never be run");
+
+  const junk = await askHost(Buffer.from("not a frame at all"));
+  assert.equal(junk.reply?.ok, false);
+  const huge = Buffer.alloc(4);
+  huge.writeUInt32LE(200000, 0);
+  assert.equal((await askHost(Buffer.concat([huge, Buffer.alloc(10)]))).reply?.code, "bad_request");
+});
+
+test("native host: start detaches a real bridge, is idempotent, and reports a busy port", async () => {
+  const PORT2 = 7395;
+  const first = await askHost({ cmd: "start", port: PORT2 });
+  assert.equal(first.reply.ok, true, JSON.stringify(first.reply));
+  assert.ok(first.reply.pid > 0);
+  // The host has already exited (we awaited its close) and the bridge is still answering: that is
+  // the detach guarantee, and it is the thing most likely to regress silently.
+  const h = await (await fetch(`http://127.0.0.1:${PORT2}/health`)).json();
+  assert.equal(h.service, "pinpoint-bridge");
+  assert.equal(h.dataFile, path.join(HOME, "annotations.json"), "PINPOINT_HOME must be baked into the wrapper");
+
+  const again = await askHost({ cmd: "start", port: PORT2 });
+  assert.equal(again.reply.already, true, "a mashed button must not spawn a second daemon");
+  assert.equal(again.reply.pid, undefined);
+  process.kill(first.reply.pid);
+  await sleep(300);
+
+  // Something else on the port: the bridge's own "already in use" paragraph is what the popup shows.
+  const squatter = http.createServer((_q, s) => s.end("no"));
+  await new Promise((r) => squatter.listen(PORT2, "127.0.0.1", r));
+  const busy = await askHost({ cmd: "start", port: PORT2 });
+  assert.equal(busy.reply.ok, false);
+  assert.equal(busy.reply.code, "port_busy");
+  assert.match(busy.reply.error, /in use/);
+  await new Promise((r) => squatter.close(r));
+  fs.rmSync(NMH_ROOT, { recursive: true, force: true });
+});
+
+test("two watching agents are handed different notes, not the same one twice", async () => {
+  const w1 = fetch(BASE + "/annotations/wait?timeout=8000").then((r) => r.json());
+  await sleep(150); // registration order is what decides who claims first
+  const w2 = fetch(BASE + "/annotations/wait?timeout=8000").then((r) => r.json());
+  await sleep(150);
+  const a = sample({ comment: "first of two" });
+  const b = sample({ comment: "second of two" });
+  await postJson("/annotations", a);
+  await sleep(250);
+  await postJson("/annotations", b);
+  const [r1, r2] = await Promise.all([w1, w2]);
+  assert.ok(r1.annotation && r2.annotation, "both waiters must get something");
+  assert.notEqual(r1.annotation.id, r2.annotation.id, "the same note must never go to two agents");
+  assert.deepEqual([r1.annotation.id, r2.annotation.id].sort(), [a.id, b.id].sort());
+});
+
+test("a resolve is attributed, and the second agent is told it was already done", async () => {
+  const a = sample({ comment: "who did this" });
+  await postJson("/annotations", a);
+  const first = await postJson(`/annotations/${a.id}/resolve`, { note: "made it purple in Hero.tsx:42", by: "claude-code" });
+  assert.equal(first.ok, true);
+  const got = (await (await fetch(`${BASE}/annotations/${a.id}`)).json()).annotation;
+  assert.equal(got.resolvedBy, "claude-code");
+  assert.equal(got.resolution, "made it purple in Hero.tsx:42");
+
+  const second = await postJson(`/annotations/${a.id}/resolve`, { note: "also made it purple", by: "cursor-vscode" });
+  assert.equal(second.ok, "already", "the second agent must be told, not silently ignored");
+});
+
+test("/events answers a client from a previous life at once instead of stalling for 25s", async () => {
+  const { storeVersion } = await (await fetch(BASE + "/health")).json();
+  const t0 = Date.now();
+  const r = await (await fetch(`${BASE}/events?since=${storeVersion + 500}&timeout=25000`)).json();
+  assert.ok(Date.now() - t0 < 2000, `answered in ${Date.now() - t0}ms — a restarted bridge must not freeze the pins`);
+  assert.equal(r.version, storeVersion);
+  assert.equal(r.changed, false);
+});
+
+test("POST /restart brings the bridge back with its annotations, flags and blocked callers", async () => {
+  const PORT3 = 7394;
+  const B3 = `http://127.0.0.1:${PORT3}`;
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), "pp-restart-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "pp-restart-home-"));
+  const d = spawn("node", [CLI, "--port", String(PORT3), "--project", proj], {
+    env: { ...process.env, PINPOINT_HOME: home }, stdio: ["ignore", "pipe", "pipe"],
+  });
+  d.stdout.on("data", () => {}); d.stderr.on("data", () => {});
+  for (let i = 0; i < 60; i++) { try { await fetch(B3 + "/health"); break; } catch { await sleep(100); } }
+
+  const a = sample({ comment: "survives a restart" });
+  await fetch(B3 + "/annotations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(a) });
+  const before = await (await fetch(B3 + "/health")).json();
+
+  // Both long-poll shapes are open across the restart: they must settle, not hang or throw.
+  const events = fetch(`${B3}/events?since=${before.storeVersion}&timeout=25000`).then((r) => r.json()).catch((e) => ({ err: String(e) }));
+  const waiting = fetch(`${B3}/annotations/wait?timeout=25000`).then((r) => r.json()).catch((e) => ({ err: String(e) }));
+  await sleep(200);
+
+  const t0 = Date.now();
+  assert.equal((await (await fetch(B3 + "/restart", { method: "POST" })).json()).restarting, true);
+  await Promise.race([Promise.all([events, waiting]), sleep(4000)]);
+  assert.ok(Date.now() - t0 < 4000, "blocked callers must be released, not left to time out");
+
+  let back = null;
+  for (let i = 0; i < 60; i++) {
+    try { back = await (await fetch(B3 + "/health")).json(); break; } catch { await sleep(100); }
+  }
+  assert.ok(back, "the bridge must come back on the same port");
+  assert.notEqual(back.pid, before.pid, "it must really be a new process");
+  assert.equal(back.project, proj, "--project must survive the re-exec");
+  assert.equal(back.pending, before.pending, "annotations are on disk, so nothing is lost");
+
+  try { process.kill(back.pid); } catch {}
+  try { d.kill(); } catch {}
+  await sleep(200);
+  fs.rmSync(proj, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true });
+});

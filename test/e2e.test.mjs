@@ -1453,3 +1453,51 @@ test("picking uses a comment cursor rather than the default arrow", async () => 
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).cursor), before);
   await page.close();
 });
+
+// The browser→native-host hop cannot be covered here: Chromium reads NativeMessagingHosts from the
+// real user-level browser directory, and a test must not write into the developer's own profile to
+// prove a feature works. Both sides of that hop are covered — the host itself in bridge.test.mjs,
+// and the popup's two states here. Restart is plain HTTP, so it is covered end to end.
+test("the popup offers to start the bridge, and says what to run once when the launcher is missing", async () => {
+  await stopDaemon();
+  const popup = await ctx.newPage();
+  const errors = [];
+  popup.on("pageerror", (e) => errors.push(String(e)));
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.waitForFunction(() => document.querySelector("#bridge .bl")?.textContent === "Start bridge", null, { timeout: 8000 });
+  await popup.locator("#bridge").click();
+  await popup.waitForFunction(() => /install-native-host/.test(document.querySelector("#hint")?.innerHTML || ""), null, { timeout: 15000 });
+  assert.deepEqual(errors, [], "a missing launcher must be explained, not thrown");
+  await popup.close();
+  await startDaemon();
+});
+
+test("the popup restarts the bridge, and the notes on the page survive it", async () => {
+  await clearAll();
+  const page = await openPage("/");
+  await annotate(page, page.locator("h1"), "still here after a restart");
+  const before = await (await fetch(BASE + "/health")).json();
+
+  const popup = await ctx.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.waitForFunction(() => document.querySelector("#bridge .bl")?.textContent === "Restart bridge", null, { timeout: 8000 });
+  await popup.locator("#bridge").click();
+
+  let back = null;
+  for (let i = 0; i < 100; i++) {
+    try { back = await (await fetch(BASE + "/health")).json(); if (back.pid !== before.pid) break; } catch {}
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  assert.ok(back && back.pid !== before.pid, "a new bridge process must be answering on the same port");
+  await popup.waitForFunction(() => document.querySelector("#dot")?.className === "dot on", null, { timeout: 15000 });
+  assert.equal((await pending()).length, 1, "annotations are on disk, so a restart never loses them");
+  assert.equal((await S(page)).pins.length, 1, "and the pin is still on the page");
+  await popup.close();
+  await page.close();
+
+  // Hand the restarted process back to the suite's own lifecycle.
+  try { process.kill(back.pid); } catch {}
+  daemon = null;
+  for (let i = 0; i < 60; i++) { try { await fetch(BASE + "/health"); } catch { break; } await new Promise((r) => setTimeout(r, 100)); }
+  await startDaemon();
+});

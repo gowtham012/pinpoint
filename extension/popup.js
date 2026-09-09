@@ -37,11 +37,15 @@ async function refresh() {
   const h = await send({ type: "health" });
   $("#dot").className = "dot " + (h.ok ? "on" : "off");
   $("#status").textContent = h.ok ? `bridge on :${h.port}${h.project ? " · " + h.project.split("/").pop() : ""}` : "bridge offline";
-  $("#hint").textContent = h.ok
+  // The bridge tells us where it lives, so once it has run once we can name the real command
+  // instead of a <pinpoint> placeholder nobody can copy.
+  if (h.cliPath) { cliPath = h.cliPath; chrome.storage.local.set({ cliPath }).catch(() => {}); }
+  paintBridgeButton(h);
+  $("#hint").innerHTML = h.ok
     ? ""
     : /Another server/.test(h.error || "")
       ? `Port ${$("#port").value} is taken by something else — change the port below, or start the bridge with --port.`
-      : "Start it in a terminal:  node <pinpoint>/bridge/cli.js --project <your repo>";
+      : `Or start it in a terminal: <code>node ${esc(cliPath || "<pinpoint>/bridge/cli.js")} --project &lt;your repo&gt;</code>`;
 
   const res = h.ok ? await send({ type: "list" }) : null;
   const list = $("#list");
@@ -68,6 +72,39 @@ async function refresh() {
     list.appendChild(li);
   }
 }
+
+// ---------- starting / restarting the bridge ----------
+let cliPath = null;
+chrome.storage.local.get({ cliPath: null }).then((v) => { cliPath = v.cliPath; }).catch(() => {});
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// Safari has no native messaging host of this kind, so it gets Restart (plain HTTP) but not Start.
+const canStart = typeof chrome.runtime.sendNativeMessage === "function";
+
+function paintBridgeButton(h) {
+  const btn = $("#bridge");
+  btn.style.display = h.ok || canStart ? "flex" : "none";
+  btn.disabled = false;
+  btn.querySelector(".bg").textContent = h.ok ? "↻" : "▶";
+  btn.querySelector(".bl").textContent = h.ok ? "Restart bridge" : "Start bridge";
+}
+
+$("#bridge").onclick = async () => {
+  const btn = $("#bridge");
+  const running = btn.querySelector(".bg").textContent === "↻";
+  btn.disabled = true;
+  btn.querySelector(".bl").textContent = running ? "Restarting…" : "Starting…";
+  const r = await send({ type: running ? "restartBridge" : "startBridge" });
+  if (r?.ok) { $("#hint").textContent = ""; refresh(); return; }
+  // Everything that can go wrong here ends in "run the installer once", except a busy port,
+  // which the bridge's own message already explains better than we could.
+  const install = `node ${esc(cliPath || "<pinpoint>/bridge/cli.js")} install-native-host`;
+  $("#hint").innerHTML =
+    r?.code === "no_host" ? `One-time setup. Run this once, then press again — if you have already run it, run it again, the extension's id may have changed:<br><code>${install}</code>`
+    : r?.code === "no_node" ? `The launcher couldn't find Node. Run this again, then press again:<br><code>${install}</code>`
+    : r?.code === "unsupported" ? esc(r.error)
+    : `<span style="white-space:pre-wrap">${esc(r?.error || "the bridge did not start")}</span>`;
+  refresh();
+};
 
 $("#pick").onclick = async () => {
   // The background never throws for an unusable page — it answers with a reason.

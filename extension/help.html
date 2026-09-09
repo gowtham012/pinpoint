@@ -13,7 +13,10 @@ node cli.js --project /path/to/your/app</pre>
 <h2>2. Connect your agent</h2>
 <p><b>Claude Code</b> — register it, then let annotations arrive by themselves:</p>
 <pre>claude mcp add pinpoint -s user -- node /ABS/PATH/pinpoint/bridge/cli.js mcp
-node /ABS/PATH/pinpoint/bridge/cli.js install-hooks /path/to/your/app</pre>
+node /ABS/PATH/pinpoint/bridge/cli.js install-hooks /path/to/your/app
+node /ABS/PATH/pinpoint/bridge/cli.js install-native-host</pre>
+<p>That last line is what makes this popup's <b>Start bridge</b> button work, so you never have to
+go back to a terminal. Run it once, then quit and reopen the browser. macOS and Linux only.</p>
 <p class="note">The second line adds two hooks to your project's <code>.claude/settings.json</code>. After that you never have to mention Pinpoint: whatever you have marked in the browser rides along with your next message. Existing settings are preserved.</p>
 <p><b>Cursor</b> — <code>.cursor/mcp.json</code></p>
 <pre>{ "mcpServers": { "pinpoint": { "command": "node", "args": ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"] } } }</pre>

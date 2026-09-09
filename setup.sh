@@ -26,6 +26,9 @@ else
   echo "    node $DIR/bridge/cli.js install-hooks $PROJECT"
 fi
 
+echo "▸ letting the extension's \"Start bridge\" button start the bridge"
+node "$DIR/bridge/cli.js" install-native-host --project "$PROJECT" || echo "  (skipped — you can still start the bridge in a terminal)"
+
 echo "▸ opening chrome://extensions — Developer mode on → Load unpacked → choose:"
 echo "    $DIR/extension"
 open -a "Google Chrome" "chrome://extensions" 2>/dev/null || true

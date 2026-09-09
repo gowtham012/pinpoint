@@ -3,12 +3,14 @@
   "name": "Pinpoint \u2014 annotate any page for your coding agent",
   "version": "0.4.0",
   "description": "Click an element on your local dev site, write what should change, and send it to Claude Code, Cursor or Codex. No screenshots on disk.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuvR5ChG0ipKdZRQIJeE3asybo2qjCL3AC8/vsMRfed1pgcRUHvh9dvFVIgTJ2pQ+AzwZZYp0d59bB6JM6HmICNPglBQmNN4VFzFb2bMdRYQpEg7X7Rwr6nHUKlzd187sJUxqShLR8FhzYrtIsN5QURnrjth1vunAeNgCU5uL33l3MbuK9a40/CqSvg3ADxJ8f419qN30f0qYVrZwVCxWEq9ph/7NnTTKB3XL3u09MDpmpxxRONTgQ5OVO33NdeVaFb1jlevFCXhhXNQ7gvOruq3ScDn2iDQ2Hj4o3Q451/aMDMLYp+c70aOzgqYjUIgxyUHDPxpBZQeF1JDR8loyPQIDAQAB",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
     "alarms",
-    "tabs"
+    "tabs",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "<all_urls>"
