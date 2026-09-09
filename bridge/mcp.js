@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 // is what every MCP client shows in its server list.
 const VERSION = createRequire(import.meta.url)("./package.json").version;
 import { z } from "zod";
-import { pendingMarkdown, summaryLine, toMarkdown } from "./store.js";
+import { pendingMarkdown, summaryLine, toMarkdown, findAnnotation } from "./store.js";
 
 function imageBlock(a) {
   return a.screenshot?.base64 ? [{ type: "image", data: a.screenshot.base64, mimeType: "image/png" }] : [];
@@ -77,7 +77,7 @@ export function createMcpServer(api) {
     },
     async ({ id }) => {
       const db = await api.db();
-      const a = db.annotations.find((x) => x.id === id || String(x.number) === String(id));
+      const a = findAnnotation(db, id);
       api.touch?.("look", a?.id || null, a ? `looking at #${a.number}` : "looking");
       if (!a) return { content: [{ type: "text", text: `No annotation ${id}` }], isError: true };
       return { content: [{ type: "text", text: toMarkdown(a) }, ...imageBlock(a)] };
@@ -99,7 +99,7 @@ export function createMcpServer(api) {
       },
     },
     async ({ id, note }) => {
-      const before = (await api.db()).annotations.find((x) => x.id === id || String(x.number) === String(id));
+      const before = findAnnotation(await api.db(), id);
       const r = await api.resolve(id, note);
       if (r) api.touch?.("resolve", before?.id || null, `done with #${before?.number ?? id}`);
       return { content: [{ type: "text", text: r ? `Resolved ${id}.` : `No annotation ${id}` }], isError: !r };

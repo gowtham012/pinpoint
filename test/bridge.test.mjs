@@ -68,7 +68,9 @@ test("POST validation: missing comment / selector / malformed JSON → 400", asy
 test("POST assigns sequential numbers and persists; GET strips screenshots unless images=1", async () => {
   const a = await (await post(sample({ id: "aaaa0001" }))).json();
   const b = await (await post(sample({ id: "bbbb0002", page: { ...sample().page, url: "http://localhost:3000/other" } }))).json();
-  assert.equal(a.number, 1); assert.equal(b.number, 2);
+  // Numbers are per page: b is on a different url, so it is that page's first note, not the
+  // store's second. A single global counter made the first note on a new site read as "#14".
+  assert.equal(a.number, 1); assert.equal(b.number, 1);
   const { annotations } = await get("/annotations");
   assert.equal(annotations.length, 2);
   assert.equal(annotations[0].screenshot, undefined);
@@ -77,7 +79,32 @@ test("POST assigns sequential numbers and persists; GET strips screenshots unles
   assert.ok(withImg.annotations[0].screenshot.base64);
   const onDisk = JSON.parse(fs.readFileSync(path.join(HOME, "annotations.json"), "utf8"));
   assert.equal(onDisk.annotations.length, 2);
-  assert.equal(onDisk.nextNumber, 3);
+  assert.equal(onDisk.annotations.filter((x) => x.number === 1).length, 2, "one #1 per page");
+});
+
+test("numbers are per page, and a number never resolves someone else's note", async () => {
+  // Deliberately does NOT clear the store: this suite is stateful and ordered, and later tests
+  // depend on what earlier ones posted. Fresh urls are enough — per-page numbering means a new
+  // page starts at 1 no matter what else is in there, which is the property under test.
+  const page = (u) => ({ ...sample().page, url: u });
+  const A = "http://localhost:3000/per-page-a", B = "http://localhost:3000/per-page-b";
+  assert.equal((await (await post(sample({ id: "pa000001", comment: "a1", page: page(A) }))).json()).number, 1);
+  assert.equal((await (await post(sample({ id: "pa000002", comment: "a2", page: page(A) }))).json()).number, 2);
+  // a different page starts again at 1 rather than continuing the store's global count
+  assert.equal((await (await post(sample({ id: "pb000001", comment: "b1", page: page(B) }))).json()).number, 1);
+
+  // "1" now exists on more than one page, so it must not silently pick one
+  assert.equal((await fetch(BASE + "/annotations/1")).status, 404, "an ambiguous number resolves nothing");
+  // ids stay unique and always work
+  assert.equal((await get("/annotations/pb000001")).annotation.comment, "b1");
+
+  // and deleting by an ambiguous number must not wipe that number from every page
+  assert.equal((await (await fetch(BASE + "/annotations/1", { method: "DELETE" })).json()).ok, false);
+  const all = (await get("/annotations?status=all")).annotations.map((x) => x.id);
+  for (const id of ["pa000001", "pa000002", "pb000001"]) assert.ok(all.includes(id), `${id} survived`);
+
+  // clean up only what this test added, so the suite's own state is untouched
+  for (const id of ["pa000001", "pa000002", "pb000001"]) await fetch(`${BASE}/annotations/${id}`, { method: "DELETE" });
 });
 
 test("GET filters by status and exact url (fragment ignored)", async () => {
@@ -96,9 +123,12 @@ test("project mirror: pending.md and pending.json written, screenshots omitted f
   assert.match(js[0].screenshot.note, /not included/);
 });
 
-test("GET /annotations/:id by id and by number; 404 for unknown", async () => {
+test("GET by id always; by number only while it is unambiguous", async () => {
   assert.equal((await get("/annotations/aaaa0001")).annotation.number, 1);
-  assert.equal((await get("/annotations/2")).annotation.id, "bbbb0002");
+  // numbering is per page, so the second annotation is its own page's #1, not the store's #2
+  assert.equal((await get("/annotations/bbbb0002")).annotation.number, 1);
+  // which means "1" now names two different notes, and must resolve neither
+  assert.equal((await fetch(BASE + "/annotations/1")).status, 404, "ambiguous number picks nothing");
   assert.equal((await fetch(BASE + "/annotations/zzz")).status, 404);
 });
 
@@ -114,8 +144,9 @@ test("resolve by id, with note; resolved items leave pending views", async () =>
   assert.equal(r2.ok, false);
 });
 
-test("DELETE one by number; DELETE all resets numbering", async () => {
-  assert.equal((await (await fetch(BASE + "/annotations/2", { method: "DELETE" })).json()).ok, true);
+test("DELETE one by id; DELETE all resets numbering", async () => {
+  // by id, not by number: the same number now exists on more than one page.
+  assert.equal((await (await fetch(BASE + "/annotations/bbbb0002", { method: "DELETE" })).json()).ok, true);
   assert.equal((await get("/annotations?status=all")).annotations.length, 1);
   await fetch(BASE + "/annotations", { method: "DELETE" });
   assert.equal((await get("/annotations?status=all")).annotations.length, 0);
@@ -219,21 +250,25 @@ for (const [name, mk] of [["http", httpClient], ["stdio", stdioClient]]) {
     assert.match(rr.contents[0].text, /# 2 pending/);
 
     const all = await c.callTool({ name: "get_pending_annotations", arguments: {} });
-    assert.match(text(all), /### #1 — first/); assert.match(text(all), /### #2 — second/);
+    // "second" is on a different page, so per-page numbering makes it that page's #1 — not the
+    // store's #2. Both notes are #1, each on its own page.
+    assert.match(text(all), /### #1 — first/); assert.match(text(all), /### #1 — second/);
     assert.equal(all.content.filter((b) => b.type === "image").length, 1, "only the annotation with a screenshot yields an image block");
     assert.equal(all.content.find((b) => b.type === "image").mimeType, "image/png");
 
     const filtered = await c.callTool({ name: "get_pending_annotations", arguments: { url: "http://other.test" } });
     assert.doesNotMatch(text(filtered), /### #1 — first/); assert.match(text(filtered), /second/);
 
-    const byNum = await c.callTool({ name: "get_annotation", arguments: { id: "2" } });
-    assert.match(text(byNum), /second/);
+    // ids always work; a number only while it names one note. Both of these are their page's #1,
+    // so "1" names two and must resolve neither — an agent is told to use the id for this reason.
+    assert.match(text(await c.callTool({ name: "get_annotation", arguments: { id: "mcp00002" } })), /second/);
+    assert.equal((await c.callTool({ name: "get_annotation", arguments: { id: "1" } })).isError, true);
     const missing = await c.callTool({ name: "get_annotation", arguments: { id: "nope" } });
     assert.equal(missing.isError, true);
 
     const resolved = await c.callTool({ name: "resolve_annotation", arguments: { id: "mcp00001", note: "done" } });
     assert.match(text(resolved), /Resolved/);
-    assert.match(text(await c.callTool({ name: "list_annotations", arguments: {} })), /^#2 \[mcp00002\] second/m);
+    assert.match(text(await c.callTool({ name: "list_annotations", arguments: {} })), /^#1 \[mcp00002\] second/m);
     assert.doesNotMatch(text(await c.callTool({ name: "list_annotations", arguments: {} })), /\] first/);
     assert.match(text(await c.callTool({ name: "list_annotations", arguments: { status: "all" } })), /first/);
     // note is required now — pass one so this still tests an unknown id, not a bad schema

@@ -3,7 +3,7 @@
 // reads fall back to the JSON file and writes are applied to it directly.
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createMcpServer } from "./mcp.js";
-import { DEFAULT_PORT, load, save } from "./store.js";
+import { DEFAULT_PORT, load, save, findAnnotation } from "./store.js";
 
 export async function startStdio({ port = DEFAULT_PORT } = {}) {
   const base = `http://127.0.0.1:${port}`;
@@ -29,7 +29,7 @@ export async function startStdio({ port = DEFAULT_PORT } = {}) {
     async resolve(id, note) {
       if (await up()) return (await call(`/annotations/${encodeURIComponent(id)}/resolve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note }) })).ok;
       const db = load();
-      const a = db.annotations.find((x) => x.id === id || String(x.number) === String(id));
+      const a = findAnnotation(db, id);
       if (!a) return false;
       a.status = "resolved"; a.resolvedAt = new Date().toISOString(); if (note) a.resolution = note;
       save(db);
