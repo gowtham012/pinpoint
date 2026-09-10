@@ -36,6 +36,9 @@ Prefer a test that describes the user's situation (`"switching tabs right after 
 - **The content script runs in two worlds.** `content.js` is the isolated world; `inspector.js` runs in the page's MAIN world because React fibers and Vue instances are invisible from the isolated one. They talk over a synchronous CustomEvent round-trip.
 - **Screenshots are taken by the service worker, not the page**, after the annotation is already stored. That is deliberate: navigating away must cost you the picture, never the comment.
 - **Selectors prefer stable attributes** (`button[data-action="next"]`) over positions, and every annotation carries a fingerprint so a pin can tell whether the element its selector now matches is really the one you clicked.
+- **The recordings are generated too.** `node tools/make-stale-demo.mjs` re-records
+  `docs/stale-demo.gif` by driving the real extension against `demo/index.html` — it asserts the
+  states it is filming, so a broken build fails the recording rather than shipping a misleading one.
 - **The icons are generated, not hand-edited.** `bash tools/make-icons.sh` cuts `extension/icon{16,48,128}.png` and the in-page bar's mark out of `tools/logo/mark.png`.
 - **The bridge refuses any request carrying a web page's `Origin`.** Only the extension and local CLI tools may talk to it. Page-scraped content is labelled as untrusted data wherever it reaches an agent.
 

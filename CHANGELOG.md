@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Added
+- **`docs/stale-demo.gif`**, and `tools/make-stale-demo.mjs` that records it: two notes on a panel
+  that rebuilds itself, so one pin re-finds its element among new nodes while the other says it is
+  not on this view — and the verdicts an agent gets for both. The recorder waits on the states it
+  narrates rather than on timers, so it cannot film a claim that is not true.
 - **A pin can tell you it has gone stale.** The browser already re-identified elements after a
   re-render — a pin either finds its own element again or hides rather than sit on a stranger — but
   that knowledge never left the page. Now the bridge is told, and the agent reads it: an annotation

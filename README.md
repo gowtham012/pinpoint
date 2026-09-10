@@ -158,6 +158,12 @@ moment your agent marks the change done. On apps that rebuild their DOM, each pi
 element by identity, and hides itself rather than sit on a different element that happens to match the
 old selector. The bar's counter opens the list of everything marked on this page; click a row to jump to it.
 
+![Two notes on a panel that rebuilds itself: one re-finds its element, the other says it is not on this view](docs/stale-demo.gif)
+
+*The same two notes, twice. Switch tabs and the panel is rebuilt from scratch — note 1 re-finds its
+own element among nodes that did not exist a moment ago, while note 2 admits it is not on this view.
+An agent asking at that moment is told the same thing.*
+
 **When the page moves underneath a pin.** A pin that can no longer find its element does not just
 hide itself — the bridge is told, so the next thing your agent reads says the element may be stale
 rather than handing it a selector that has gone bad. And `recheck_annotation` asks your browser to
