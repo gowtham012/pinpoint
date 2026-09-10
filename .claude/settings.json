@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/gowthamkumarsolleti/Downloads/pinpoint/bridge/cli.js\" print --hook"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/gowthamkumarsolleti/Downloads/pinpoint/bridge/cli.js\" print --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

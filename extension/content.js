@@ -1352,14 +1352,27 @@
     paintDock();
     if (ui.panel.style.display === "flex") renderPanel();
   }
+  // What the pin can see, told to the bridge so the agent hears about it too. positionAll runs on
+  // every scroll and mutation, so only transitions are reported — and only from the top frame, or
+  // an iframe would report its own failure to find a top-document element.
+  function reportState(p, state) {
+    if (!isTop || p.reported === state) return;
+    p.reported = state;
+    try { chrome.runtime.sendMessage({ type: "elementState", id: p.id, state, url: location.href }); } catch {}
+  }
+
   function positionPin(p, taken) {
     if (p.el && (!p.el.isConnected || (p.fp && !fingerprintMatches(p.el, p.fp)))) p.el = null;
     const el = p.el || (p.el = findElement(p.selector, p.fp));
     if (!el) {
       p.node.style.display = "none";
       p.node.dataset.orphan = "1";
+      reportState(p, "gone");
       return;
     }
+    // Found, but its own selector now lands somewhere else: the pin is fine and the selector is
+    // not, which is exactly the case that would edit the wrong node.
+    reportState(p, safeQuery(p.selector) === el ? "ok" : "moved");
     delete p.node.dataset.orphan;
     const r = el.getBoundingClientRect();
     const visible = r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
@@ -1494,6 +1507,37 @@
     else if (msg.type === "reloadPins") { loadPins().then(() => { refreshDock(); reply({ ok: true }); }); return true; }
     else if (msg.type === "showDock") { chrome.storage.local.remove(HIDE_KEY).finally(() => { dockHidden = false; refreshDock(); reply({ ok: true }); }); return true; }
     else if (msg.type === "clearPins") { pins.forEach((p) => p.node.remove()); pins = []; reply({ ok: true }); }
+    else if (msg.type === "recheck") {
+      // Re-identify the element the way a pin does, and describe what is there NOW. The bridge
+      // does the comparing; this side only reports.
+      (async () => {
+        const el = findElement(msg.selector, msg.fingerprint);
+        if (!el) return reply({ found: false, url: location.href });
+        const r = el.getBoundingClientRect();
+        // A region was anchored to this element with an offset, so its box moves with it.
+        const override = msg.region
+          ? { x: r.left + window.scrollX + msg.region.dx, y: r.top + window.scrollY + msg.region.dy, width: msg.region.width, height: msg.region.height }
+          : null;
+        reply({
+          found: true,
+          url: location.href,
+          selectorStillMatches: safeQuery(msg.selector) === el,
+          element: {
+            tag: el.tagName.toLowerCase(),
+            selector: uniqueSelector(el),
+            text: clip(el.innerText || el.textContent, 200),
+            outerHTML: clip(el.outerHTML, 600),
+            attributes: pickAttributes(el),
+            rect: { x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY), width: Math.round(r.width), height: Math.round(r.height) },
+            styles: computedStyles(el),
+            fingerprint: fingerprint(el),
+          },
+          capture: await captureRect(el, override),
+        });
+      })();
+      return true;
+    }
+    else if (msg.type === "hideForCapture") { hideOverlayForCapture(); reply({ ok: true }); }
     else if (msg.type === "viewportNow") reply({ x: window.scrollX, y: window.scrollY, w: window.innerWidth, h: window.innerHeight, url: location.href });
     else if (msg.type === "ping") reply({ ok: true, picking, pins: pins.length });
   });

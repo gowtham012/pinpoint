@@ -40,6 +40,13 @@ export async function startStdio({ port = DEFAULT_PORT } = {}) {
       if (await up()) return call("/annotations", { method: "DELETE" });
       save({ nextNumber: 1, annotations: [] });
     },
+    // The browser is only reachable through the daemon, so a re-check without one is honestly
+    // "could not look" rather than a guess from the stored snapshot.
+    async recheck(id, timeoutMs) {
+      if (!(await up())) return { status: "no_bridge" };
+      const { result } = await call(`/annotations/${encodeURIComponent(id)}/recheck?timeout=${timeoutMs}`, { method: "POST" });
+      return result;
+    },
     async waitForNext(timeoutMs) {
       if (!(await up())) return null;
       const { annotation } = await call(`/annotations/wait?timeout=${timeoutMs}`);

@@ -109,6 +109,7 @@ async function watch() {
         return; // bridge down: the alarm will try again shortly
       }
       if (first) { first = false; broadcastReload(); }   // tell open tabs the bridge is up
+      if (res.rechecks?.length) for (const r of res.rechecks) answerRecheck(r);
       if (res.version !== since) {
         since = res.version;
         await chrome.storage.session.set({ storeVersion: since });
@@ -252,6 +253,67 @@ async function finishCapture(tab, capture, id, expectedUrl) {
   }
 }
 
+// ---------- re-checking a pin against the live page ----------
+// An agent asked whether an element is still what the developer marked. Only the page can answer,
+// so this finds a tab showing it, has the content script re-identify the element, and crops it
+// again — reusing the same capture chain as a first screenshot, including its honesty about a tab
+// that is not in front.
+const answering = new Set();
+
+async function answerRecheck({ reqId, id, url }) {
+  if (answering.has(reqId)) return;
+  answering.add(reqId);
+  const send = (body) => bridgeFetch(`/rechecks/${encodeURIComponent(reqId)}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  }).catch(() => {});
+  try {
+    const tabs = (await chrome.tabs.query({})).filter((t) => (t.url || "").split("#")[0] === url);
+    if (!tabs.length) return void (await send({ status: "no_tab" }));
+    // Prefer a tab that is in front: only a visible tab can be photographed.
+    const tab = tabs.find((t) => t.active) || tabs[0];
+
+    const found = await chrome.tabs.sendMessage(tab.id, { type: "recheck", ...(await annotationBits(id)) }, { frameId: 0 }).catch(() => null);
+    if (!found) return void (await send({ status: "no_answer" }));
+    if (!found.found) return void (await send({ status: "ok", element: null, url: found.url }));
+
+    let screenshot = null, screenshotSkipped = null;
+    if (found.capture) {
+      await chrome.tabs.sendMessage(tab.id, { type: "hideForCapture" }, { frameId: 0 }).catch(() => {});
+      try {
+        const shot = await queueCapture(async () => {
+          const state = await waitUntilCapturable(tab, tab.url, 2000);
+          if (state !== "ready") return { skipped: { navigated: "the page changed", gone: "the tab was closed", hidden: "the tab was not in front" }[state] };
+          await new Promise((r) => setTimeout(r, 60));
+          return { shot: await captureElement(tab.windowId, found.capture.rect, found.capture.dpr) };
+        });
+        screenshot = shot.shot || null;
+        screenshotSkipped = shot.skipped || null;
+      } catch (e) {
+        screenshotSkipped = "the picture could not be taken";
+      }
+      chrome.tabs.sendMessage(tab.id, { type: "captureDone" }, { frameId: 0 }).catch(() => {});
+    } else {
+      screenshotSkipped = "the element is not visible on screen";
+    }
+    await send({ status: "ok", element: found.element, selectorStillMatches: found.selectorStillMatches, url: found.url, screenshot, screenshotSkipped });
+  } catch (e) {
+    await send({ status: "no_answer", error: String(e.message || e) });
+  } finally {
+    answering.delete(reqId);
+  }
+}
+
+// The page needs the selector and identity card to look with; ask the bridge for them rather than
+// carrying a copy of the annotation around.
+async function annotationBits(id) {
+  try {
+    const { annotation } = await bridgeFetch(`/annotations/${encodeURIComponent(id)}`);
+    return { selector: annotation.element.selector, fingerprint: annotation.element.fingerprint, region: annotation.region || null };
+  } catch {
+    return {};
+  }
+}
+
 // ---------- starting and restarting the bridge ----------
 // A content script cannot reach native messaging — only this worker, the popup and other extension
 // pages can. Never add a chrome.runtime.onMessageExternal handler: without one, other installed
@@ -321,6 +383,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           setTimeout(() => finishCapture(sender.tab, msg.capture, result.id, sender.tab.url), 0);
         }
         return result;
+      }
+      // A pin telling us the page has moved underneath it. Fire and forget: the bridge stores it
+      // without bumping its version, so this can never turn into a reload loop.
+      case "elementState": {
+        try {
+          await bridgeFetch(`/annotations/${encodeURIComponent(msg.id)}/element-state`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ state: msg.state, url: msg.url, at: new Date().toISOString() }),
+          });
+        } catch {}
+        return { ok: true };
       }
       case "attachScreenshot": {
         return bridgeFetch(`/annotations/${encodeURIComponent(msg.id)}/screenshot`, {

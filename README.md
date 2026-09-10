@@ -158,6 +158,13 @@ moment your agent marks the change done. On apps that rebuild their DOM, each pi
 element by identity, and hides itself rather than sit on a different element that happens to match the
 old selector. The bar's counter opens the list of everything marked on this page; click a row to jump to it.
 
+**When the page moves underneath a pin.** A pin that can no longer find its element does not just
+hide itself — the bridge is told, so the next thing your agent reads says the element may be stale
+rather than handing it a selector that has gone bad. And `recheck_annotation` asks your browser to
+look again right now: it re-finds the element, says whether it is gone, moved out from under its
+selector, or merely changed, and returns a fresh crop next to the one taken when you marked it. If no
+tab is open on that page it says it could not look — never that nothing changed.
+
 **Marking an area.** Some changes are about a group — *"make these cards two-up on mobile"*. **Drag**
 instead of clicking and you get a box, anchored to the deepest element that fully contains it. Your
 agent gets a real container to change, plus the list of what the box held and a screenshot cropped to it.
@@ -268,6 +275,7 @@ $PINPOINT_HOME   where annotations are stored (default ~/.pinpoint)
 | `get_pending_annotations` | everything pending as a markdown task list, each with its screenshot |
 | `list_annotations` | one line per annotation |
 | `get_annotation` | full detail + screenshot for one id or pin number |
+| `recheck_annotation` | re-find the element in the live page and report what changed, with a fresh crop next to the original |
 | `resolve_annotation` | mark done → the pin disappears in the browser within a second |
 | `wait_for_annotation` | block until the developer sends the next one |
 | `clear_annotations` | wipe everything |

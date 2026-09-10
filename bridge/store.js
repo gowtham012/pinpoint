@@ -51,11 +51,82 @@ export function pending(db) {
   return db.annotations.filter((a) => a.status === "pending");
 }
 
+// ---------- staleness ----------
+// A pin knows when the page has moved underneath it — the browser drops an element whose
+// fingerprint stops matching and re-finds it by identity. This turns the two snapshots (what was
+// marked, what is there now) into something an agent can act on before it edits anything.
+//
+// `after` is null when the element could not be found at all. `selectorStillMatches` is the
+// interesting bit: found by identity but not by its own selector means the selector has gone bad
+// even though the element is fine, which is exactly the case that silently edits the wrong node.
+const DIFF_STYLES_SHOWN = 8;
+
+export function diffElement(before, after, { selectorStillMatches = true } = {}) {
+  if (!after) return { verdict: "gone", changes: [], summary: "The element is no longer on the page." };
+
+  const changes = [];
+  const text = (x) => (x?.text || "").trim();
+  if (text(before) !== text(after)) changes.push({ what: "text", from: text(before), to: text(after) });
+  if ((before?.outerHTML || "") !== (after?.outerHTML || "")) changes.push({ what: "html" });
+
+  const b = before?.rect || {}, a = after?.rect || {};
+  // A couple of pixels is layout noise, not a change worth waking an agent for.
+  if (Math.abs((b.width || 0) - (a.width || 0)) > 2 || Math.abs((b.height || 0) - (a.height || 0)) > 2) {
+    changes.push({ what: "size", from: `${b.width}×${b.height}`, to: `${a.width}×${a.height}` });
+  }
+
+  const styles = [];
+  for (const [k, v] of Object.entries(before?.styles || {})) {
+    const now = after?.styles?.[k];
+    if (now !== undefined && now !== v) styles.push({ property: k, from: v, to: now });
+  }
+  if (styles.length) changes.push({ what: "styles", styles });
+
+  if (!selectorStillMatches) {
+    return {
+      verdict: "moved",
+      changes,
+      summary: `The element is still there, but \`${before?.selector}\` no longer matches it — it was found by identity instead. Re-derive the selector before using it.`,
+    };
+  }
+  if (!changes.length) return { verdict: "unchanged", changes: [], summary: "The element is exactly as it was when it was marked." };
+  return { verdict: "changed", changes, summary: `The element is still there, but it has changed since it was marked: ${changes.map((c) => c.what).join(", ")}.` };
+}
+
+// Renders a diff for an agent. Kept next to diffElement so the wording and the data cannot drift.
+export function diffMarkdown(d) {
+  const lines = [`**Verdict: ${d.verdict}.** ${d.summary}`];
+  for (const c of d.changes || []) {
+    if (c.what === "text") lines.push(`- Text was "${c.from}", is now "${c.to}"`);
+    else if (c.what === "size") lines.push(`- Size was ${c.from}, is now ${c.to}`);
+    else if (c.what === "html") lines.push(`- The element's own HTML changed`);
+    else if (c.what === "styles") {
+      const shown = c.styles.slice(0, DIFF_STYLES_SHOWN).map((x) => `${x.property}: ${x.from} → ${x.to}`).join("; ");
+      lines.push(`- Computed styles changed: ${shown}${c.styles.length > DIFF_STYLES_SHOWN ? `, and ${c.styles.length - DIFF_STYLES_SHOWN} more` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// What the browser last reported about this element, said as an observation with a time on it —
+// never as a claim about right now. The page may not even be open.
+export function stalenessLine(a) {
+  const st = a?.element?.state;
+  if (!st || st.state === "ok") return null;
+  const when = st.at ? new Date(st.at).toLocaleTimeString() : "earlier";
+  const what = st.state === "gone"
+    ? "was no longer on the page"
+    : `was still there, but \`${a.element.selector}\` no longer matched it`;
+  return `- ⚠️ **Possibly stale:** when this page was last open (${when}) this element ${what}. ` +
+    `Call \`recheck_annotation\` with id \`${a.id}\` before editing — it re-finds the element and returns a fresh crop next to the original.`;
+}
+
 // ---------- formatting shared by MCP, CLI and file export ----------
 export function summaryLine(a) {
   const comp = a.source?.components?.[0] ? `<${a.source.components[0]}> ` : "";
   const file = a.source?.file ? ` (${a.source.file}${a.source.line ? ":" + a.source.line : ""})` : "";
-  return `#${a.number} [${a.id}] ${a.comment} — ${comp}${a.element.selector}${file}`;
+  const stale = a.element?.state && a.element.state.state !== "ok" ? ` [${a.element.state.state === "gone" ? "element gone" : "selector stale"}]` : "";
+  return `#${a.number} [${a.id}] ${a.comment} — ${comp}${a.element.selector}${file}${stale}`;
 }
 
 export function toMarkdown(a, { heading = true, channel = "mcp" } = {}) {
@@ -84,6 +155,8 @@ export function toMarkdown(a, { heading = true, channel = "mcp" } = {}) {
       }
     }
   }
+  const stale = stalenessLine(a);
+  if (stale) lines.push(stale);
   if (e.text) {
     const tt = e.styles?.["text-transform"];
     lines.push(`- Text as rendered: "${e.text}"` + (tt && tt !== "none" ? ` (CSS text-transform: ${tt} — the source string will differ, grep the HTML below instead)` : ""));

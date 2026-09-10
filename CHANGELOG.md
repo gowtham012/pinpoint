@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Added
+- **A pin can tell you it has gone stale.** The browser already re-identified elements after a
+  re-render — a pin either finds its own element again or hides rather than sit on a stranger — but
+  that knowledge never left the page. Now the bridge is told, and the agent reads it: an annotation
+  whose element went missing, or whose selector stopped matching it, arrives marked *possibly stale*
+  with what to do about it. **`recheck_annotation`** does that on demand: it asks the open tab to
+  find the element again, and answers with a verdict (gone / moved / changed / unchanged), the
+  specific differences — text, size, the computed properties that changed by name — and a fresh crop
+  next to the one taken when it was marked. With no tab open it says it could not look, which is
+  never the same answer as "nothing changed". Resolving something the page had moved under still
+  works, and now says so. Asked for by a reader, and tested the way they framed it: a page that
+  rebuilds its DOM between the pin and the edit.
 - **`node bridge/cli.js setup` — the whole install in one command.** With `git clone` in front of it
   that is two commands and nothing else: it installs the bridge's dependencies itself (it is written
   to run before `npm install`), then asks, with a default on every question — which project to

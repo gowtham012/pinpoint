@@ -1501,3 +1501,64 @@ test("the popup restarts the bridge, and the notes on the page survive it", asyn
   for (let i = 0; i < 60; i++) { try { await fetch(BASE + "/health"); } catch { break; } await new Promise((r) => setTimeout(r, 100)); }
   await startDaemon();
 });
+
+// ============ round 6: a page that changes after the pin was placed ============
+// Asked for by a reader: "have the agent re-identify the element and show the before/after crop
+// before accepting the edit. A precise pointer is most useful when it can also tell you it has
+// gone stale." Step 2 of this form throws away the labelled fields entirely and keeps the primary
+// button, whose text changes — one element that is gone, one that is still there but is not what
+// was marked.
+test("B6: a page that changes under a pin tells the agent, and re-check shows what is there now", async () => {
+  await clearAll();
+  const page = await openPage("/rerender.html");
+  await annotate(page, page.locator('label[for="first_name"] span'), "should read Given Name");
+  await annotate(page, page.locator('[data-action="next"]'), "make this button purple");
+  const [label, button] = await pendingWithShots(2);
+
+  await page.evaluate(() => window.__setStep(2));
+  await page.waitForTimeout(600);
+
+  // 1. the passive half: the browser noticed, and the bridge was told
+  const state = async (id) => {
+    for (let i = 0; i < 40; i++) {
+      const { annotations } = await (await fetch(BASE + "/annotations?status=pending")).json();
+      const a = annotations.find((x) => x.id === id);
+      if (a?.element?.state) return a.element.state;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  };
+  assert.equal((await state(label.id))?.state, "gone", "a pin whose element the page threw away says so");
+
+  // and the agent reads it in the task list, with what to do about it
+  const md = await (await fetch(BASE + "/pending.md")).text();
+  assert.match(md, /Possibly stale/);
+  assert.match(md, /recheck_annotation/);
+
+  const c = new Client({ name: "t", version: "0" });
+  await c.connect(new StreamableHTTPClientTransport(new URL(BASE + "/mcp")));
+  const asText = (r) => r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n");
+
+  // 2. the element that is gone: said plainly, and no "after" picture invented for it
+  const goneRes = await c.callTool({ name: "recheck_annotation", arguments: { id: label.id, timeoutSeconds: 20 } });
+  const goneText = asText(goneRes);
+  assert.match(goneText, /Verdict: gone/, goneText);
+  assert.doesNotMatch(goneText, /After —/, "there is nothing to photograph");
+
+  // 3. the element that survived the re-render but is not what was marked: before AND after
+  const changedRes = await c.callTool({ name: "recheck_annotation", arguments: { id: button.id, timeoutSeconds: 20 } });
+  const changedText = asText(changedRes);
+  assert.match(changedText, /Verdict: (changed|moved)/, changedText);
+  assert.match(changedText, /Continue to Step 2/, "it names the text that was there when it was marked");
+  assert.match(changedText, /Submit/, "and the text that is there now");
+  assert.equal(changedRes.content.filter((b) => b.type === "image").length, 2, "before and after, side by side");
+
+  // 4. with the page closed, it must say it could not look — never that nothing changed
+  await page.close();
+  await new Promise((r) => setTimeout(r, 300));
+  const blind = asText(await c.callTool({ name: "recheck_annotation", arguments: { id: button.id, timeoutSeconds: 5 } }));
+  assert.match(blind, /Could not re-check/, blind);
+  assert.match(blind, /No tab is open/);
+  assert.doesNotMatch(blind, /Verdict/, "silence is not a clean bill of health");
+  await c.close();
+});

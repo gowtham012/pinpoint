@@ -67,6 +67,9 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
   // wait_for_annotation with the SAME note, so two agents did the same work and the second
   // resolve silently overwrote the first one's reply.
   const taken = new Set();
+  // Outstanding "is this element still there?" questions, keyed by request id. Bounded by their
+  // own deadlines: a question nobody answers expires rather than accumulating.
+  const rechecks = new Map();
 
   const api = {
     async db() { return db; },
@@ -166,6 +169,61 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
         events.on("screenshot", on);
       });
     },
+    // What the browser last saw of this element. Deliberately `save` and NOT `persist`: persist
+    // bumps the version, every tab reloads its pins, positionPin runs again and reports again —
+    // an infinite loop. The extension does not need to hear its own report back.
+    async setElementState(id, state) {
+      const a = find(id);
+      if (!a) return false;
+      a.element.state = { state: state.state, at: state.at || new Date().toISOString(), url: state.url || null };
+      save(db);
+      return true;
+    },
+
+    // A recheck is a question for the browser: is this element still there, and what does it look
+    // like now? It travels out on the /events long-poll the extension already runs, and comes back
+    // as a POST. Unanswered requests stay in the payload, so an evicted service worker picks them
+    // up on its next poll rather than losing the question.
+    requestRecheck(id, timeoutMs) {
+      const a = find(id);
+      if (!a) return null;
+      const reqId = Math.random().toString(36).slice(2, 10);
+      const req = { reqId, id: a.id, url: pageKeyOf(a), deadline: Date.now() + timeoutMs, result: null };
+      rechecks.set(reqId, req);
+      bump(); // releases the extension's poll at once
+      return req;
+    },
+    openRechecks() {
+      const now = Date.now();
+      for (const [k, r] of rechecks) if (r.result || r.deadline < now) rechecks.delete(k);
+      return [...rechecks.values()].filter((r) => !r.result && r.deadline > now).map(({ reqId, id, url }) => ({ reqId, id, url }));
+    },
+    completeRecheck(reqId, result) {
+      const req = rechecks.get(reqId);
+      if (!req) return false;
+      req.result = result || { status: "no_answer" };
+      events.emit("recheck", req);
+      return true;
+    },
+    // Ask, and wait for the answer: what the MCP tool calls in-process, and what the HTTP route
+    // (and therefore the stdio server) calls too — one path, so they cannot answer differently.
+    async recheck(id, timeoutMs = 10000) {
+      const req = api.requestRecheck(id, timeoutMs);
+      if (!req) return { status: "not_found" };
+      return api.waitForRecheck(req, timeoutMs);
+    },
+    waitForRecheck(req, timeoutMs) {
+      if (req.result) return Promise.resolve(req.result);
+      return new Promise((resolve) => {
+        const done = (r) => { clearTimeout(t); events.off("recheck", on); rechecks.delete(req.reqId); resolve(r); };
+        // Timing out is an answer of its own — "nobody looked" — and must never be reported as
+        // "nothing changed".
+        const t = setTimeout(() => done({ status: "timeout" }), timeoutMs);
+        const on = (x) => { if (x.reqId === req.reqId) done(x.result); };
+        events.on("recheck", on);
+      });
+    },
+
     waitForVersion(since, timeoutMs) {
       // `!==`, not `>`: after a restart our counter is back at 1 while the extension still asks
       // since=57. A client from a previous life is answered at once — with `>` it ate the full
@@ -283,7 +341,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
       if (p === "/events") {
         const since = Number(url.searchParams.get("since") || 0);
         const v = await api.waitForVersion(since, Math.min(Number(url.searchParams.get("timeout") || 25000), 60000));
-        return json(res, 200, { version: v, changed: v > since });
+        return json(res, 200, { version: v, changed: v > since, rechecks: api.openRechecks() });
       }
 
       if (p === "/annotations" && req.method === "GET") {
@@ -312,7 +370,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
         return json(res, 200, { annotation: a ? await api.waitForScreenshot(a.id) : null });
       }
 
-      const m = p.match(/^\/annotations\/([^/]+)(\/resolve|\/screenshot|\/notified)?$/);
+      const m = p.match(/^\/annotations\/([^/]+)(\/resolve|\/screenshot|\/notified|\/element-state|\/recheck)?$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
         if (req.method === "DELETE") return json(res, 200, { ok: await api.remove(id) });
@@ -320,6 +378,20 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
           let body = {};
           try { body = (await readBody(req)) || {}; } catch {}
           return json(res, 200, { ok: await api.resolve(id, body.note, body.by) });
+        }
+        if (req.method === "POST" && m[2] === "/element-state") {
+          let body = {};
+          try { body = (await readBody(req)) || {}; } catch {}
+          if (!body.state) return json(res, 400, { error: "state required" });
+          return json(res, 200, { ok: await api.setElementState(id, body) });
+        }
+        // Ask the browser, wait for it, and answer with the verdict. This is what the stdio MCP
+        // server proxies to, which is how Claude Code and Cursor reach it.
+        if (req.method === "POST" && m[2] === "/recheck") {
+          const timeout = Math.min(Number(url.searchParams.get("timeout") || 10000), 60000);
+          const a = find(id);
+          if (!a) return json(res, 404, { error: "not found" });
+          return json(res, 200, { annotation: a, result: await api.recheck(id, timeout) });
         }
           if (req.method === "POST" && m[2] === "/notified") {
           const a = find(id);
@@ -336,6 +408,14 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
           const a = find(id);
           return a ? json(res, 200, { annotation: a }) : json(res, 404, { error: "not found" });
         }
+      }
+
+      // The extension answering a recheck it was asked for.
+      const rc = p.match(/^\/rechecks\/([^/]+)$/);
+      if (rc && req.method === "POST") {
+        let body = {};
+        try { body = (await readBody(req)) || {}; } catch (e) { return json(res, 400, { error: String(e.message) }); }
+        return json(res, 200, { ok: api.completeRecheck(decodeURIComponent(rc[1]), body) });
       }
 
       if (p === "/pending.md") {

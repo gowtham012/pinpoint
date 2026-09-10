@@ -243,7 +243,7 @@ for (const [name, mk] of [["http", httpClient], ["stdio", stdioClient]]) {
     await post(sample({ id: "mcp00002", comment: "second", page: { ...sample().page, url: "http://other.test/" }, screenshot: null }));
     const c = await mk();
     const tools = (await c.listTools()).tools.map((t) => t.name).sort();
-    assert.deepEqual(tools, ["clear_annotations", "get_annotation", "get_pending_annotations", "list_annotations", "resolve_annotation", "wait_for_annotation"]);
+    assert.deepEqual(tools, ["clear_annotations", "get_annotation", "get_pending_annotations", "list_annotations", "recheck_annotation", "resolve_annotation", "wait_for_annotation"]);
     const res = await c.listResources();
     assert.ok(res.resources.some((r) => r.uri === "pinpoint://pending"));
     const rr = await c.readResource({ uri: "pinpoint://pending" });
@@ -953,4 +953,115 @@ test("setup wires a project up in one non-interactive run, twice over", async ()
 
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(proj, { recursive: true, force: true });
+});
+
+// ---------- staleness: telling the agent the page moved under a pin ----------
+
+test("diffElement names what changed, and never calls an unfound element unchanged", async () => {
+  const { diffElement, diffMarkdown } = await import("../bridge/store.js");
+  const before = { selector: "h1", text: "Old", outerHTML: "<h1>Old</h1>", rect: { width: 100, height: 20 }, styles: { color: "red", "font-size": "54px" } };
+
+  assert.equal(diffElement(before, { ...before }).verdict, "unchanged");
+  assert.equal(diffElement(before, null).verdict, "gone", "no element is never 'unchanged'");
+
+  const changed = diffElement(before, { ...before, text: "New", outerHTML: "<h1>New</h1>", styles: { color: "red", "font-size": "46px" } });
+  assert.equal(changed.verdict, "changed");
+  const md = diffMarkdown(changed);
+  assert.match(md, /Text was "Old", is now "New"/);
+  assert.match(md, /font-size: 54px → 46px/, "the changed property is named, not just 'styles changed'");
+
+  // Found, but its own selector lands elsewhere: the element is fine and the selector is not.
+  assert.equal(diffElement(before, { ...before }, { selectorStillMatches: false }).verdict, "moved");
+
+  // A pixel of layout noise is not a change worth waking an agent for.
+  assert.equal(diffElement(before, { ...before, rect: { width: 101, height: 20 } }).verdict, "unchanged");
+});
+
+test("a pin that reports itself gone reaches the agent — and does not bump the store version", async () => {
+  await post(sample({ id: "stale001", comment: "make this wider" }));
+  const versionBefore = (await (await fetch(BASE + "/health")).json()).storeVersion;
+
+  const r = await fetch(BASE + `/annotations/stale001/element-state`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "gone", at: new Date().toISOString(), url: "http://localhost:3000/" }),
+  });
+  assert.equal((await r.json()).ok, true);
+
+  // The version must NOT move: it is what makes every tab reload its pins, which would re-run the
+  // check that produced this report — a loop.
+  const versionAfter = (await (await fetch(BASE + "/health")).json()).storeVersion;
+  assert.equal(versionAfter, versionBefore, "reporting staleness must not trigger a reload in every tab");
+
+  const md = await (await fetch(BASE + "/pending.md")).text();
+  assert.match(md, /Possibly stale/, "the agent is told");
+  assert.match(md, /recheck_annotation/, "and told what to do about it");
+});
+
+test("recheck_annotation asks the browser, and reports what came back", async () => {
+  await fetch(BASE + "/annotations", { method: "DELETE" });
+  await post(sample({ id: "rechk001", comment: "make this bold" }));
+  await fetch(BASE + "/annotations/rechk001/screenshot", {
+    method: "PUT", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ base64: "iVBORw0KGgo=", width: 10, height: 10 }),
+  });
+
+  const c = await httpClient();
+  const call = c.callTool({ name: "recheck_annotation", arguments: { id: "rechk001", timeoutSeconds: 10 } });
+
+  // Stand in for the extension: the question arrives on the events poll, the answer goes back as
+  // a POST. Exactly the round trip the service worker makes.
+  let req = null;
+  for (let i = 0; i < 40 && !req; i++) {
+    const ev = await (await fetch(BASE + "/events?since=0&timeout=500")).json();
+    req = ev.rechecks?.[0] || null;
+  }
+  assert.ok(req, "the browser is asked");
+  assert.equal(req.id, "rechk001");
+
+  await fetch(BASE + `/rechecks/${req.reqId}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      status: "ok", selectorStillMatches: false,
+      element: { selector: "button.primary", text: "Start free trial", outerHTML: "<button>Start free trial</button>", rect: { width: 120, height: 40 }, styles: { "font-weight": "700" } },
+      screenshot: { base64: "iVBORw0KGgoAAAA=", width: 20, height: 20 },
+    }),
+  });
+
+  const res = await call;
+  const body = text(res);
+  assert.match(body, /Verdict: moved/, body);
+  assert.match(body, /Before —/);
+  assert.match(body, /After —/);
+  assert.equal(res.content.filter((b) => b.type === "image").length, 2, "the agent gets both crops");
+  await c.close();
+});
+
+test("a re-check nobody answers says so, and never says the element is fine", async () => {
+  await fetch(BASE + "/annotations", { method: "DELETE" });
+  await post(sample({ id: "rechk002", comment: "tighten this" }));
+  const c = await httpClient();
+  const res = await c.callTool({ name: "recheck_annotation", arguments: { id: "rechk002", timeoutSeconds: 1 } });
+  const body = text(res);
+  assert.match(body, /Could not re-check/);
+  assert.doesNotMatch(body, /unchanged|Verdict/, "silence is not a clean bill of health");
+  assert.match(body, /still from when it was marked/, "and the stale details are labelled as such");
+  await c.close();
+});
+
+test("resolving something the page has moved under warns, but never blocks", async () => {
+  await fetch(BASE + "/annotations", { method: "DELETE" });
+  await post(sample({ id: "stale002", comment: "make this full-width" }));
+  await fetch(BASE + "/annotations/stale002/element-state", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "gone" }),
+  });
+
+  const c = await httpClient();
+  const res = await c.callTool({ name: "resolve_annotation", arguments: { id: "stale002", note: "made it full-width in Hero.tsx:12" } });
+  const body = text(res);
+  assert.match(body, /Resolved/, "the resolve still happens — this is a warning, not a gate");
+  assert.match(body, /never re-checked/, body);
+  const [a] = (await (await fetch(BASE + "/annotations?status=resolved")).json()).annotations;
+  assert.equal(a.status, "resolved");
+  await c.close();
 });
