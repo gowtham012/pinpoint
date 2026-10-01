@@ -10,7 +10,7 @@ For what is collected, where it is stored and who else can see it, see [PRIVACY.
 
 Pinpoint moves text and screenshots from your browser to your coding agent, so the trust boundaries matter.
 
-- **The bridge listens on `127.0.0.1` only.** It also refuses any request carrying a web page's `Origin` header — only `chrome-extension://` callers and origin-less local CLI tools are accepted, so a site you happen to be visiting cannot read your notes or plant instructions for your agent. DNS rebinding does not help an attacker either: the `Host` header must be loopback.
+- **The bridge listens on `127.0.0.1` only.** It also refuses any request carrying a web page's `Origin` header — only `chrome-extension://` callers, origin-less local CLI tools and the bridge's own origin (the `/ios` Simulator picker it serves, sent with `X-Frame-Options: DENY` so no site can frame it) are accepted, so a site you happen to be visiting cannot read your notes or plant instructions for your agent. DNS rebinding does not help an attacker either: the `Host` header must be loopback.
 - **The bridge identifies itself** with a `service: "pinpoint-bridge"` marker, so the extension will not mistake some other server on port 7331 for it and start posting your page content there.
 - **Everything scraped from a page is labelled untrusted** in the markdown handed to an agent. Only the comment you typed is presented as an instruction; element text, HTML, attributes and styles are explicitly framed as data for locating the element.
 - **The extension only injects itself into local development pages** — localhost, the loopback range, private LAN addresses, `.local`/`.test`/`.localhost` hosts and `file://`. Anywhere else it is not present unless you turn it on for that tab from the toolbar.

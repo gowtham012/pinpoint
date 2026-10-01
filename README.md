@@ -4,11 +4,12 @@
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![stars](https://img.shields.io/github/stars/gowtham012/pinpoint?style=flat)](https://github.com/gowtham012/pinpoint/stargazers)
 
-Click an element on your local dev site, write what should change, and your coding agent gets it — with the selector, DOM path, computed styles, React/Vue component chain, source-file hint and a cropped screenshot. No screenshot files piling up in your Downloads folder, no describing "the third button on the left".
+Click an element on your local dev site, write what should change, and your coding agent gets it — with the selector, DOM path, computed styles, React/Vue component chain, source-file hint and a cropped screenshot. No screenshot files piling up in your Downloads folder, no describing "the third button on the left". Building a native app? The same works on the [iOS Simulator](#native-ios-apps-simulator).
 
 ```
 Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──MCP / hooks──▶ Claude Code, Cursor, Codex…
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
+iOS Simulator ─▶ 127.0.0.1:7331/ios ─┘  (screenshot + accessibility tree instead of the DOM)
 ```
 
 ![Pinpoint on a local dev page: picking an element, writing what should change, and the agent picking it up](docs/demo.gif)
@@ -123,6 +124,25 @@ blockers remain: `background: { service_worker }` where Firefox MV3 wants `backg
 and a missing `browser_specific_settings.gecko.id`. Both are fixable, but keeping them honest needs a
 Firefox job in CI rather than a claim in a README. Open an issue if you want it.
 </details>
+
+## Native iOS apps (Simulator)
+
+A native app has no DOM, so this path reads the **accessibility tree** instead. It works for SwiftUI,
+UIKit, React Native and Flutter apps, and needs nothing added to your app.
+
+**You need** Xcode with a booted Simulator and [Maestro](https://maestro.dev) (it reads the tree,
+and needs Java — a Homebrew `openjdk` is found even when it is not on your PATH). The bridge keeps one
+`maestro mcp` process running for it, so only the first load waits (~10s, while Maestro starts its
+on-device driver); every refresh after that takes about a second.
+
+With the bridge running, open **http://127.0.0.1:7331/ios**. It shows the Simulator's screen: hover to
+see each element, click one, type what should change, **⌘↩**. The note reaches your agent like any
+other, with the element's `accessibilityIdentifier` (your `testID`), its label, its path in the tree,
+its frame and a crop. Press **R** (or Refresh) after the app changes; resolved notes drop off.
+
+What it cannot give you: a source-file hint or component chain (the tree has neither — give elements
+an identifier and the agent greps for it), styles, or `recheck_annotation`, which waits for a browser
+and times out here. Android is not wired up yet.
 
 ## Where it runs
 
@@ -268,6 +288,8 @@ node cli.js install-native-host   let the popup's "Start bridge" button start th
 node cli.js clear              delete everything
 node cli.js --help
 
+http://127.0.0.1:7331/ios      the iOS Simulator picker, served by the running bridge
+
 --port <n>       default 7331, or $PINPOINT_PORT (set the same number in the popup)
 --project <dir>  mirror pending annotations into <dir>/.pinpoint/
 --print          echo each new annotation to stdout as it arrives
@@ -302,6 +324,10 @@ source           framework (react/vue/svelte/angular/astro), component chain,
                  file:line where the dev build exposes it
 screenshot       PNG of just the element (+8px), long edge ≤1200px
 ```
+
+From the [iOS Simulator](#native-ios-apps-simulator), `element` carries the accessibility identifier,
+label, text and value instead, the path through the accessibility tree, and the frame in points;
+`source` is `ios-native` with no file, and `page.url` is `ios-simulator://<device name>`.
 
 For exact `file:line` on React 19 or Next, add a dev-only inspector plugin
 (`vite-plugin-react-inspector`, `@react-dev-inspector`) — Pinpoint reads the `data-source` attributes
@@ -390,14 +416,15 @@ cd demo && python3 -m http.server 8080     # then open http://localhost:8080
 cd test && npm install && npx playwright install chromium && npm test
 ```
 
-101 tests. `bridge.test.mjs` covers the daemon, CLI, hooks and every MCP tool over both stdio and
-Streamable HTTP; `e2e.test.mjs` loads the unpacked extension into headless Chromium and drives real pages
+102 tests. `bridge.test.mjs` covers the daemon, CLI, hooks, the iOS picker's tree-to-annotation path
+and every MCP tool over both stdio and Streamable HTTP; `e2e.test.mjs` loads the unpacked extension into headless Chromium and drives real pages
 — React, Vue, shadow DOM, an iframe, a strict-CSP page, a 3,600-node stress page, DPR 2, cross-tab sync,
 and a form that rebuilds its whole DOM. See [CONTRIBUTING.md](CONTRIBUTING.md) for what each suite is for.
 
 ## Safety and storage
 
-The bridge binds to `127.0.0.1`, refuses any request carrying a web page's `Origin`, and identifies
+The bridge binds to `127.0.0.1`, refuses any request carrying a web page's `Origin` (the one exception
+is its own, for the `/ios` page it serves, which also refuses to be framed), and identifies
 itself with a `service` marker; everything scraped from the page is labelled untrusted where it reaches
 your agent, and only your typed comment is presented as an instruction. Screenshots live base64-encoded
 inside `~/.pinpoint/annotations.json` rather than as loose files. [SECURITY.md](SECURITY.md) has the full
@@ -407,7 +434,9 @@ connect it to.
 
 ## Roadmap
 
-- Mobile: same bridge, picker as an overlay in an Expo dev client or Capacitor webview over LAN.
+- Android emulator: `maestro hierarchy` already reads the tree there; it needs `adb` for the screenshot.
+- Native source hints: React Native's `_debugSource` and Flutter's widget creation locations, via an
+  optional dev-only package in the app.
 - CSS source mapping via `chrome.debugger` (which rule set this colour, and where).
 - Page-level annotations — a note about the whole page rather than an element or an area.
 - Firefox: the manifest needs a `scripts` background and a `gecko.id`.

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinpoint — iOS Simulator</title>
+<style>
+  :root { --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6e6e73; --card: #fff; --line: #d9d9d6; --accent: #e5484d; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161617; --fg: #f2f2f2; --muted: #9a9a9f; --card: #232325; --line: #3a3a3d; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  header b { font-weight: 600; }
+  #status { color: var(--muted); flex: 1; }
+  button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { display: flex; justify-content: center; padding: 16px; }
+  #stage { position: relative; cursor: crosshair; line-height: 0; }
+  #shot { max-height: calc(100vh - 90px); max-width: 100%; border-radius: 12px; box-shadow: 0 2px 16px #0003; user-select: none; }
+  .box { position: absolute; border: 2px solid var(--accent); background: #e5484d22; pointer-events: none; border-radius: 3px; }
+  #tip { position: absolute; transform: translateY(-100%); background: var(--fg); color: var(--bg); font-size: 12px; line-height: 1.3; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+  .pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--accent); color: #fff; font: 600 12px/22px system-ui; text-align: center; pointer-events: auto; cursor: help; }
+  #pop { position: absolute; width: 280px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; line-height: 1.4; box-shadow: 0 6px 24px #0004; z-index: 2; cursor: default; }
+  #pop .what { color: var(--muted); font-size: 12px; margin-bottom: 6px; overflow-wrap: anywhere; }
+  #pop textarea { width: 100%; height: 70px; font: inherit; padding: 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; }
+  #pop .row { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <b>Pinpoint · iOS Simulator</b>
+  <span id="status">Loading…</span>
+  <button id="refresh" title="Take a fresh screenshot (R)">Refresh</button>
+</header>
+<main>
+  <div id="stage">
+    <img id="shot" alt="Simulator screen">
+    <div id="hover" class="box" hidden></div>
+    <div id="tip" hidden></div>
+    <div id="pop" hidden>
+      <div class="what" id="what"></div>
+      <textarea id="comment" placeholder="What should change?"></textarea>
+      <div class="row"><button id="cancel">Cancel</button><button id="send" class="primary">Send ⌘↩</button></div>
+    </div>
+  </div>
+</main>
+<script>
+// Everything shown from the tree goes through textContent: labels come from the app and are untrusted.
+const $ = (id) => document.getElementById(id);
+const shot = $("shot"), stage = $("stage"), hover = $("hover"), tip = $("tip"), pop = $("pop");
+let screen = null, picked = null, pins = [];
+
+const describe = (n) => n.id ? "#" + n.id : (n.label || n.text || n.value) ? `"${(n.label || n.text || n.value).slice(0, 50)}"` : "view";
+// On-screen pixels per point, since the image is scaled to fit the window.
+const scale = () => shot.clientWidth / screen.viewport.width;
+const place = (el, b) => Object.assign(el.style, { left: b.x * scale() + "px", top: b.y * scale() + "px", width: b.width * scale() + "px", height: b.height * scale() + "px" });
+
+// The smallest node under the point is the one you meant; a full-screen container never is.
+function nodeAt(x, y) {
+  let best = null;
+  for (const n of screen.nodes) {
+    const b = n.bounds;
+    if (x < b.x || y < b.y || x > b.x + b.width || y > b.y + b.height) continue;
+    if (!best || b.width * b.height < best.bounds.width * best.bounds.height) best = n;
+  }
+  return best;
+}
+function pointFrom(e) {
+  const r = shot.getBoundingClientRect();
+  return [(e.clientX - r.left) / scale(), (e.clientY - r.top) / scale()];
+}
+
+async function load() {
+  $("status").textContent = "Reading the simulator… (the first time takes a few seconds)";
+  closePop();
+  const res = await fetch("/ios/screen");
+  const body = await res.json();
+  if (!res.ok) { $("status").textContent = body.error; return; }
+  screen = body;
+  shot.src = "data:image/png;base64," + body.png;
+  await shot.decode();
+  $("status").textContent = `${body.device.name} — ${body.nodes.length} elements. Hover, click one, say what should change.`;
+  loadPins();
+}
+
+// Pending notes for this simulator, so a resolved one disappears when you refresh.
+async function loadPins() {
+  pins.forEach((p) => p.remove());
+  const url = `ios-simulator://${screen.device.name}`;
+  const { annotations } = await (await fetch("/annotations?status=pending&url=" + encodeURIComponent(url))).json();
+  pins = annotations.map((a) => {
+    const p = document.createElement("div");
+    p.className = "pin";
+    p.textContent = a.number;
+    p.title = a.comment;
+    p.style.left = (a.element.rect.x + a.element.rect.width) * scale() + "px";
+    p.style.top = a.element.rect.y * scale() + "px";
+    stage.append(p);
+    return p;
+  });
+}
+
+shot.addEventListener("mousemove", (e) => {
+  if (!screen || !pop.hidden) return;
+  const n = nodeAt(...pointFrom(e));
+  hover.hidden = tip.hidden = !n;
+  if (!n) return;
+  place(hover, n.bounds);
+  tip.textContent = describe(n);
+  tip.style.left = n.bounds.x * scale() + "px";
+  tip.style.top = n.bounds.y * scale() - 2 + "px";
+});
+shot.addEventListener("mouseleave", () => { if (pop.hidden) hover.hidden = tip.hidden = true; });
+
+shot.addEventListener("click", (e) => {
+  if (!screen) return;
+  picked = nodeAt(...pointFrom(e));
+  if (!picked) return;
+  place(hover, picked.bounds);
+  hover.hidden = false; tip.hidden = true;
+  $("what").textContent = picked.path;
+  const b = picked.bounds, s = scale();
+  pop.style.left = Math.min(b.x * s, shot.clientWidth - 280) + "px";
+  pop.style.top = (b.y + b.height) * s + 6 + "px";
+  pop.hidden = false;
+  $("comment").value = "";
+  $("comment").focus();
+});
+
+function closePop() { pop.hidden = hover.hidden = true; picked = null; }
+
+// Crop the node out of the full-resolution screenshot, with a little context around it.
+function crop(b) {
+  const dpr = shot.naturalWidth / screen.viewport.width, pad = 8;
+  const x = Math.max(0, (b.x - pad) * dpr), y = Math.max(0, (b.y - pad) * dpr);
+  const w = Math.min(shot.naturalWidth - x, (b.width + pad * 2) * dpr), h = Math.min(shot.naturalHeight - y, (b.height + pad * 2) * dpr);
+  const c = document.createElement("canvas");
+  c.width = Math.round(w); c.height = Math.round(h);
+  c.getContext("2d").drawImage(shot, x, y, w, h, 0, 0, w, h);
+  return { base64: c.toDataURL("image/png").split(",")[1], width: c.width, height: c.height };
+}
+
+async function send() {
+  const comment = $("comment").value.trim();
+  if (!comment || !picked) return;
+  $("send").disabled = true;
+  try {
+    const res = await fetch("/ios/annotations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ comment, node: picked, device: screen.device, viewport: screen.viewport, screenshot: crop(picked.bounds) }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error);
+    $("status").textContent = `Sent #${body.number} to your agent.`;
+    closePop();
+    loadPins();
+  } catch (e) {
+    $("status").textContent = "Could not send: " + e.message;
+  } finally {
+    $("send").disabled = false;
+  }
+}
+
+$("send").onclick = send;
+$("cancel").onclick = closePop;
+$("refresh").onclick = load;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePop();
+  else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+  else if (e.key.toLowerCase() === "r" && pop.hidden && !e.metaKey && !e.ctrlKey) load();
+});
+window.addEventListener("resize", () => screen && (closePop(), loadPins()));
+load();
+</script>
+</body>
+</html>

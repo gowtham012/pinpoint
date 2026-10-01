@@ -29,6 +29,9 @@ Options
   --yes             (with setup) take every default instead of asking
   --no-start        (with setup) wire everything up but do not start the bridge
 
+iOS Simulator
+  open http://127.0.0.1:<port>/ios while the bridge runs (needs Xcode and Maestro)
+
 Files
   ${DATA_FILE}   annotations (screenshots inline, no loose image files)
   $PINPOINT_HOME overrides that location

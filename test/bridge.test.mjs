@@ -1065,3 +1065,36 @@ test("resolving something the page has moved under warns, but never blocks", asy
   assert.equal(a.status, "resolved");
   await c.close();
 });
+
+test("ios: an accessibility tree flattens to clickable nodes and becomes a normal annotation", async () => {
+  const { flatten, fromCompact, toAnnotation } = await import("../bridge/ios.js");
+  const leaf = (attrs) => ({ attributes: { accessibilityText: "", text: "", "resource-id": "", bounds: "[0,0][0,0]", ...attrs }, children: [] });
+  const tree = { attributes: { bounds: "[0,0][0,0]" }, children: [{ attributes: { accessibilityText: "Home", bounds: "[0,0][402,874]" }, children: [
+    leaf({ "resource-id": "tab-home", accessibilityText: "Home", bounds: "[0,789][80,840]" }),
+    leaf({ bounds: "[0,0][0,0]" }),
+  ] }] };
+  const nodes = flatten(tree);
+  assert.equal(nodes.length, 2, "zero-size nodes are dropped");
+  const tab = nodes.find((n) => n.id === "tab-home");
+  assert.deepEqual(tab.bounds, { x: 0, y: 789, width: 80, height: 51 });
+  assert.equal(tab.path, '"Home" > #tab-home');
+  // maestro mcp's inspect_screen abbreviates keys; converted, it must flatten to the same nodes.
+  const compact = { b: "[0,0][402,874]", a11y: "Home", c: [{ b: "[0,789][80,840]", a11y: "Home", rid: "tab-home" }] };
+  assert.deepEqual(flatten({ children: [fromCompact(compact)] }).map((n) => n.path), ['"Home"', '"Home" > #tab-home']);
+
+  const a = toAnnotation({ node: tab, comment: "bigger", device: { name: "iPhone 17 Pro" }, viewport: { width: 402, height: 874, dpr: 3 }, id: "x1" });
+  assert.equal(a.element.selector, '[accessibilityIdentifier="tab-home"]');
+  assert.equal(a.page.url, "ios-simulator://iPhone 17 Pro");
+  assert.equal(a.source.attributes.testID, "tab-home");
+
+  const res = await fetch(BASE + "/ios/annotations", { method: "POST", headers: { "content-type": "application/json", origin: BASE },
+    body: JSON.stringify({ comment: "bigger", node: tab, device: { name: "iPhone 17 Pro" }, viewport: { width: 402, height: 874, dpr: 3 }, screenshot: { base64: "aGk=", width: 1, height: 1 } }) });
+  assert.equal(res.status, 201, "the bridge's own origin may post");
+  const { id } = await res.json();
+  const { annotation } = await get(`/annotations/${id}`);
+  assert.equal(annotation.status, "pending");
+  assert.equal(annotation.screenshot.width, 1);
+
+  const evil = await fetch(BASE + "/ios/annotations", { method: "POST", headers: { origin: "http://localhost:3000" }, body: "{}" });
+  assert.equal(evil.status, 403, "a dev site on another port is still refused");
+});

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Added
+- **Native iOS apps, from the Simulator.** A native app has no DOM, so the bridge now serves a picker
+  at `/ios` that shows the booted Simulator's screen (`xcrun simctl`) over its accessibility tree
+  (Maestro, kept running as one `maestro mcp` process so a refresh takes ~1s rather than the ~14s a
+  `maestro hierarchy` run costs to boot its JVM and driver). Hover to see each element, click one, say what should change — it becomes an
+  ordinary annotation with the accessibility identifier, label, tree path, frame and a crop, so MCP,
+  hooks and `pending.md` need no changes. Works for SwiftUI, UIKit, React Native and Flutter with
+  nothing added to the app. No source-file hint (the tree has none) and no `recheck_annotation` yet.
 - **`docs/stale-demo.gif`**, and `tools/make-stale-demo.mjs` that records it: two notes on a panel
   that rebuilds itself, so one pin re-finds its element among new nodes while the other says it is
   not on this view — and the verdicts an agent gets for both. The recorder waits on the states it

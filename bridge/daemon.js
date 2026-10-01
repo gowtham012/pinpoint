@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp.js";
+import { snapshot as iosSnapshot, toAnnotation as iosAnnotation } from "./ios.js";
 import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, summaryLine, findAnnotation, pageKeyOf } from "./store.js";
 
 const MAX_RESOLVED = Number(process.env.PINPOINT_MAX_RESOLVED) || 200;
@@ -284,12 +285,14 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     const origin = req.headers.origin;
     // Only the extension (a *-extension:// origin) and origin-less local CLI tools. A localhost
     // origin is a web page too — the very dev site being annotated — so it is refused like any other.
-    if (origin && !/^(chrome|moz|safari-web)-extension:\/\//.test(origin)) {
+    // The one exception is our own origin: the /ios picker page is served by this bridge.
+    const self = origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
+    if (origin && !self && !/^(chrome|moz|safari-web)-extension:\/\//.test(origin)) {
       return json(res, 403, { error: "origin not allowed" });
     }
-    // Anything that gets past that check with an Origin at all is the extension. Recording when we
+    // Anything else that gets past that check with an Origin at all is the extension. Recording when we
     // last heard from it is what lets `cli.js setup` say "it is loaded" instead of "now go and load it".
-    if (origin) extensionSeenAt = new Date().toISOString();
+    if (origin && !self) extensionSeenAt = new Date().toISOString();
 
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
@@ -336,6 +339,24 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
         json(res, 200, { ok: true, restarting: true, port });
         setTimeout(restart, 50); // let the response flush before the socket goes
         return;
+      }
+
+      // ---- iOS Simulator picker ----
+      if (p === "/ios" && req.method === "GET") {
+        // Never framed: a page that could embed us could trick a click into sending a note.
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY", "content-security-policy": "frame-ancestors 'none'" });
+        return res.end(fs.readFileSync(path.join(path.dirname(CLI_PATH), "ios.html")));
+      }
+      if (p === "/ios/screen" && req.method === "GET") {
+        try { return json(res, 200, await iosSnapshot()); } catch (e) { return json(res, 502, { error: e.message }); }
+      }
+      if (p === "/ios/annotations" && req.method === "POST") {
+        let b;
+        try { b = await readBody(req); } catch (e) { return json(res, 400, { error: String(e.message) }); }
+        if (!b?.comment || !b.node?.bounds || !b.device?.name) return json(res, 400, { error: "comment, node and device required" });
+        const saved = await api.add(iosAnnotation({ ...b, id: Math.random().toString(36).slice(2, 10) }));
+        if (b.screenshot?.base64) await api.attachScreenshot(saved.id, b.screenshot);
+        return json(res, 201, { ok: true, id: saved.id, number: saved.number });
       }
 
       if (p === "/events") {
@@ -446,6 +467,7 @@ export function startDaemon({ port = DEFAULT_PORT, project = process.env.PINPOIN
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => {
       log(`listening on http://127.0.0.1:${port}  (MCP: http://127.0.0.1:${port}/mcp)`);
+      if (process.platform === "darwin") log(`iOS Simulator picker: http://127.0.0.1:${port}/ios`);
       if (project) { log(`mirroring pending annotations to ${path.join(project, ".pinpoint")}/`); mirrorToProject(); }
       resolve({ server, api, port, close: () => new Promise((r) => server.close(r)) });
     });
