@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
 
 ### Added
+- **Notes can be about behaviour, not only looks.** Every channel used to call a note a "UI change
+  request" and the MCP server pointed agents at "UI or styling" tasks, so "this should save the draft
+  first" got the button restyled. Now the agent is told a note may be about how the element looks *or*
+  what it does, that the comment in the developer's own words is the whole instruction, and that for a
+  behaviour change the element is the way in — follow it into the handlers, state, API calls and
+  backend behind it. The comment box says so too ("how it looks or what it does?").
+- **`setup` asks whether the app is web or native iOS.** Web gets the browser extension as before;
+  iOS skips the browser step, checks for Xcode, Maestro and Java (saying how to get whichever is
+  missing, installing nothing), and opens the Simulator picker. `--for web|ios|both` answers it
+  without asking.
 - **Native iOS apps, from the Simulator.** A native app has no DOM, so the bridge now serves a picker
   at `/ios` that shows the booted Simulator's screen (`xcrun simctl`) over its accessibility tree
   (Maestro, kept running as one `maestro mcp` process so a refresh takes ~1s rather than the ~14s a
@@ -69,6 +79,11 @@ Found by installing Pinpoint and using it as a first-time user, then reading the
   Store, this key must be stripped from the uploaded zip.)
 
 ### Fixed
+- **The iOS picker recovers when another Maestro restarts the Simulator driver.** Every Maestro on a
+  machine shares one on-device driver; when another one (an agent's Maestro MCP server, a test run)
+  restarted it, the bridge's Maestro kept talking to the dead one and every refresh failed with
+  "Device became unreachable" until the bridge was restarted. A failed read now starts a fresh Maestro
+  and retries once, and a cold start may take up to two minutes rather than timing out at one.
 - **Two agents watching at once both got the same note.** `wait_for_annotation` woke every blocked
   waiter with the same annotation, so they duplicated the work and the second `resolve_annotation`
   silently replaced the first agent's reply. Each new note now goes to exactly one waiter, and

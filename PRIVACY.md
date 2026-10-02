@@ -20,6 +20,12 @@ this is assembled and posted to your local bridge:
 - **your comment** — the sentence you typed
 - **a screenshot** — a PNG cropped to the element, captured by the extension's service worker
 
+From the **iOS Simulator picker** (`/ios`, served by the bridge), the same note is made from the
+Simulator instead: the bridge takes a screenshot of the booted Simulator with `xcrun simctl` and reads
+its accessibility tree (identifiers, labels, visible text, frames) through Maestro, both locally, each
+time you open or refresh the page. Only the element you click and send is stored, with a crop of it;
+the full screenshot and tree are discarded.
+
 ## Where it goes
 
 To `http://127.0.0.1:<port>` (7331 by default) and nowhere else. The extension contains no other

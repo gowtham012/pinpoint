@@ -40,6 +40,14 @@ Prefer a test that describes the user's situation (`"switching tabs right after 
   `docs/stale-demo.gif` by driving the real extension against `demo/index.html` — it asserts the
   states it is filming, so a broken build fails the recording rather than shipping a misleading one.
 - **The icons are generated, not hand-edited.** `bash tools/make-icons.sh` cuts `extension/icon{16,48,128}.png` and the in-page bar's mark out of `tools/logo/mark.png`.
+- **Native iOS apps go through `bridge/ios.js` and `bridge/ios.html`, not the extension.** The bridge
+  serves the picker at `/ios`; it turns an accessibility-tree node into an annotation in the browser's
+  shape, so nothing downstream (MCP, hooks, `pending.md`) has a second code path. Its tree-to-annotation
+  logic is unit-tested in `bridge.test.mjs`; the Simulator itself is not in CI.
+- **Notes are not only about styling.** Agent-facing text (`pendingMarkdown` in `store.js`, the MCP
+  server instructions) tells the agent a comment may be about behaviour, and that the element is where
+  to start, not the whole change. Keep new wording in that spirit: "UI change request" made agents
+  restyle a button whose note said what it should *do*.
 - **The bridge refuses any request carrying a web page's `Origin`.** Only the extension and local CLI tools may talk to it. Page-scraped content is labelled as untrusted data wherever it reaches an agent.
 
 ## Publishing

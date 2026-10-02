@@ -115,7 +115,8 @@ test("GET filters by status and exact url (fragment ignored)", async () => {
 
 test("project mirror: pending.md and pending.json written, screenshots omitted from json", async () => {
   const md = fs.readFileSync(path.join(PROJECT, ".pinpoint/pending.md"), "utf8");
-  assert.match(md, /# 2 pending UI change requests/);
+  assert.match(md, /# 2 pending change requests/);
+  assert.match(md, /how the element looks or about what it does/, "the agent is told a note can be about behaviour, not only styling");
   assert.match(md, /Component chain \(react\): Hero ← App/);
   assert.match(md, /Source file: src\/Hero.tsx:12/);
   const js = JSON.parse(fs.readFileSync(path.join(PROJECT, ".pinpoint/pending.json"), "utf8"));
@@ -213,9 +214,9 @@ test("annotations survive daemon restart; port-in-use exits with clear error", a
 test("CLI print (via daemon) and print --consume; clear", async () => {
   const run = (args) => new Promise((res) => { const p = spawn("node", [CLI, ...args, "--port", String(PORT)], { env: ENV }); let out = ""; p.stdout.on("data", (d) => (out += d)); p.once("exit", (c) => res({ out, c })); });
   let { out } = await run(["print"]);
-  assert.match(out, /pending UI change request/);
+  assert.match(out, /pending change request/);
   ({ out } = await run(["print", "--consume"]));
-  assert.match(out, /pending UI change request/);
+  assert.match(out, /pending change request/);
   assert.equal((await get("/annotations?status=pending")).annotations.length, 0);
   await post(sample());
   const { c } = await run(["clear"]);
@@ -934,6 +935,14 @@ test("setup wires a project up in one non-interactive run, twice over", async ()
   const settings = path.join(proj, ".claude/settings.json");
   assert.ok(fs.existsSync(settings), "hooks land without being asked");
   assert.match(fs.readFileSync(settings, "utf8"), /print --hook/);
+
+  // A native iOS app skips the browser entirely and is pointed at the Simulator picker instead.
+  const ios = await run([proj, "--for", "mobile"]);
+  assert.equal(ios.code, 0, ios.err);
+  assert.match(ios.err, /127\.0\.0\.1:7401\/ios/);
+  assert.doesNotMatch(ios.err, /Load unpacked/, "no extension to load for a native app");
+  const { normTarget } = await import("../bridge/setup.js");
+  assert.deepEqual(["", "web", "iOS", "native", "Both"].map(normTarget), ["web", "web", "ios", "ios", "both"]);
 
   const second = await run([proj]);
   assert.equal(second.code, 0, second.err);

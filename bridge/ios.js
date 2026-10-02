@@ -2,7 +2,7 @@
 // instead. `xcrun simctl` takes the screenshot and Maestro reads the tree; the page at
 // /ios lets you click a node on that screenshot, and what it sends becomes an ordinary annotation —
 // MCP, hooks and pending.md never know it did not come from a browser.
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,13 +43,39 @@ export function fromCompact(el) {
   };
 }
 
-async function hierarchy(udid) {
-  const r = await (await maestroClient()).callTool({ name: "inspect_screen", arguments: { device_id: udid } });
+async function readTree(udid) {
+  // A cold start installs the on-device driver, which can take most of a minute.
+  const r = await (await maestroClient()).callTool({ name: "inspect_screen", arguments: { device_id: udid } }, undefined, { timeout: 120000 });
   const text = (r.content || []).filter((x) => x.type === "text").map((x) => x.text).join("\n");
   // The reply can lead with prose (a viewer link, a first-run notice) before the JSON.
   const at = text.indexOf('{"ui_schema"');
   if (r.isError || at < 0) throw new Error(text.trim().split("\n").pop() || "empty reply");
   return { children: JSON.parse(text.slice(at)).elements.map(fromCompact) };
+}
+
+// Every Maestro on this machine shares one on-device driver, and another one (an agent's Maestro
+// MCP, a test run) restarting it leaves ours talking to a dead driver — "Device became unreachable"
+// on every read after, though our process is alive. So a failed read throws the process away and
+// tries once more with a fresh one, which brings its own driver up.
+async function hierarchy(udid) {
+  try { return await readTree(udid); } catch {
+    const old = maestro;
+    maestro = null;
+    (await old?.catch(() => null))?.close().catch(() => {});
+    return readTree(udid);
+  }
+}
+
+// What `setup` checks before pointing anyone at /ios: the three things the picker shells out to.
+// Each missing one comes back as a line saying how to get it — nothing is installed for you.
+export function iosReadiness() {
+  if (process.platform !== "darwin") return ["the iOS Simulator only runs on macOS"];
+  const ok = (cmd, args) => spawnSync(cmd, args, { stdio: "ignore", env: maestroEnv() }).status === 0;
+  const missing = [];
+  if (!ok("xcrun", ["simctl", "help"])) missing.push("Xcode, for the Simulator — install it from the App Store");
+  if (!ok(MAESTRO, ["--version"])) missing.push('Maestro, which reads the screen — curl -fsSL "https://get.maestro.mobile.dev" | bash');
+  else if (!maestroEnv().JAVA_HOME && !ok("java", ["-version"])) missing.push("Java, which Maestro needs — brew install openjdk@17");
+  return missing;
 }
 
 export async function bootedDevice() {

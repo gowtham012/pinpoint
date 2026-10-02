@@ -6,6 +6,11 @@
 
 Click an element on your local dev site, write what should change, and your coding agent gets it — with the selector, DOM path, computed styles, React/Vue component chain, source-file hint and a cropped screenshot. No screenshot files piling up in your Downloads folder, no describing "the third button on the left". Building a native app? The same works on the [iOS Simulator](#native-ios-apps-simulator).
 
+It is not only for styling. Say what the thing should *do* — "disable this until the form is valid",
+"this should save the draft before closing", "show the error the API returned here" — and the agent
+is told to treat the element as where to start, then follow it into the handlers, state, API calls
+and backend behind it. [More below](#looks-or-behaviour).
+
 ```
 Browser (extension) ──POST──▶ pinpoint bridge (127.0.0.1:7331) ──MCP / hooks──▶ Claude Code, Cursor, Codex…
         pins ◀──live events───┘   ~/.pinpoint/annotations.json   └── <repo>/.pinpoint/pending.md (optional)
@@ -44,15 +49,19 @@ That is the install. `setup` installs its own dependencies first, then asks — 
 default, so Enter all the way through is a working setup:
 
 - **which project's UI you want to annotate** — the repo whose files your agent will be editing
+- **whether it is a web app or a native iOS app** (or both) — web gets the browser extension; iOS
+  gets the [Simulator picker](#native-ios-apps-simulator), and setup checks for Xcode, Maestro and
+  Java and says how to get whichever is missing. It installs none of them for you.
 - **which agents to wire up** — it detects Claude Code, Cursor and Codex and writes the MCP entry for
   each: `claude mcp add` for Claude Code, `<project>/.cursor/mcp.json` for Cursor,
   `~/.codex/config.toml` for Codex. Existing entries are merged, never replaced, and the TOML file is
   backed up before it is touched.
 - **whether to install the Claude Code hooks**, which carry pending notes in with your next message
-- **which browser** to load the extension into, listing the ones you actually have
+- **which browser** to load the extension into, listing the ones you actually have (web only)
 
 Then it registers the launcher behind the popup's **Start bridge** button and starts the bridge.
-Non-interactive, for a scripted machine: `node pinpoint/bridge/cli.js setup ~/code/my-app --yes`.
+Non-interactive, for a scripted machine: `node pinpoint/bridge/cli.js setup ~/code/my-app --yes`
+(add `--for ios` or `--for both`; the default is `web`).
 
 **The one step that cannot be a command.** Chrome does not let a terminal load an unpacked extension
 into your own profile — only the Web Store or an enterprise policy can. So setup opens your browser's
@@ -133,9 +142,13 @@ UIKit, React Native and Flutter apps, and needs nothing added to your app.
 **You need** Xcode with a booted Simulator and [Maestro](https://maestro.dev) (it reads the tree,
 and needs Java — a Homebrew `openjdk` is found even when it is not on your PATH). The bridge keeps one
 `maestro mcp` process running for it, so only the first load waits (~10s, while Maestro starts its
-on-device driver); every refresh after that takes about a second.
+on-device driver); every refresh after that takes about a second. Every Maestro on your Mac shares that
+one driver, so if another one (an agent's Maestro MCP server, a test run) restarts it, the bridge's next
+read fails, and the bridge then starts a fresh Maestro and tries once more. If the first load takes
+minutes, close the Claude Code sessions you are not using that have the Maestro MCP server.
 
-With the bridge running, open **http://127.0.0.1:7331/ios**. It shows the Simulator's screen: hover to
+Setup asks whether your app is web or iOS, and for iOS opens this page for you. Otherwise, with the
+bridge running, open **http://127.0.0.1:7331/ios**. It shows the Simulator's screen: hover to
 see each element, click one, type what should change, **⌘↩**. The note reaches your agent like any
 other, with the element's `accessibilityIdentifier` (your `testID`), its label, its path in the tree,
 its frame and a crop. Press **R** (or Refresh) after the app changes; resolved notes drop off.
@@ -242,9 +255,24 @@ Three mechanisms, strongest first. They stack — using all three is fine.
   browser, type anything in Claude Code, and it comes along. Your own settings in that file are
   preserved, and re-running updates rather than duplicates. Restart Claude Code once afterwards.
 - **MCP (on request).** The `pinpoint` server's instructions tell the agent to check for annotations
-  whenever you talk about a UI change, so "make that button bigger" usually triggers a lookup on its own.
+  whenever you talk about a UI or feature change, so "make that button bigger" usually triggers a
+  lookup on its own.
 - **A watch loop (hands-off).** Say *"watch pinpoint and apply each change as it comes in"*. The agent
   parks on `wait_for_annotation`, which returns the instant you hit Send — screenshot included.
+
+## Looks or behaviour
+
+The comment is the instruction, in your words, and it can be about anything the element is part of.
+Both of these are good notes:
+
+- *"Make this full-width on mobile and drop the shadow"* — a styling change, made where the element is.
+- *"Clicking this should save the draft first, and show a toast if the save fails"* — a behaviour
+  change. The button is just the way in: the agent is told to follow it from its component into the
+  handler, the state, the API call and, if that is where the fix belongs, the backend route.
+
+Every channel — MCP, the hooks, `pending.md`, the copy-to-clipboard buttons — tells the agent that a
+note may be about either, so a behaviour request is not restyled and called done. The more you say
+about the outcome you want ("should", "instead of", "when … then …"), the less the agent has to guess.
 
 ## Connecting other agents
 

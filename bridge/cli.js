@@ -5,7 +5,7 @@ import { DEFAULT_PORT, DATA_FILE, load, save, pending, pendingMarkdown, findAnno
 
 const SELF = fileURLToPath(import.meta.url);
 
-const USAGE = `pinpoint — send UI change requests from your browser to your coding agent
+const USAGE = `pinpoint — point at something in your app, say what should change, and your coding agent gets it
 
 Usage
   node cli.js setup [dir]              set everything up, asking as it goes (start here)
@@ -28,6 +28,7 @@ Options
   --id <id>         (with install-native-host) also allow this extension id
   --yes             (with setup) take every default instead of asking
   --no-start        (with setup) wire everything up but do not start the bridge
+  --for <what>      (with setup) web, ios or both, instead of being asked
 
 iOS Simulator
   open http://127.0.0.1:<port>/ios while the bridge runs (needs Xcode and Maestro)
@@ -46,7 +47,7 @@ const args = process.argv.slice(2);
 // The subcommand may sit after flags (`--port 7332 status`), so find it wherever it is rather
 // than only at position 0 — otherwise a flag-first invocation silently starts a daemon instead.
 const CMDS = ["setup", "start", "mcp", "print", "resolve", "install-hooks", "install-native-host", "status", "clear", "help"];
-const VALUE_FLAGS = ["--port", "--project"];
+const VALUE_FLAGS = ["--port", "--project", "--for"];
 function pickCommand() {
   // A leading positional is the command, whatever it is — so an unknown one still reports itself
   // rather than silently starting a daemon.
@@ -106,7 +107,7 @@ switch (cmd) {
     try {
       await runSetup({
         project: positionals()[0] || opt("project", null),
-        port, yes: flag("yes"), start: !flag("no-start"), ids,
+        port, yes: flag("yes"), start: !flag("no-start"), ids, target: opt("for", null),
       });
     } catch (e) {
       // Same contract as install-hooks: a readable sentence, never a stack trace at the moment a

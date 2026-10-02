@@ -191,7 +191,7 @@ test("Copy prompt writes a markdown prompt to the clipboard", async () => {
   await page.evaluate(() => { const r = document.querySelector("pinpoint-root").shadowRoot; r.querySelector("textarea").value = "copy me"; r.querySelector(".copy").click(); });
   await page.waitForFunction(() => /Copied/.test(document.querySelector("pinpoint-root").shadowRoot.querySelector(".pop .status").textContent));
   const clip = await page.evaluate(() => navigator.clipboard.readText());
-  assert.match(clip, /## UI change request/); assert.match(clip, /\*\*Change:\*\* copy me/); assert.match(clip, /Hero ← App/); assert.match(clip, /`#get-started`/);
+  assert.match(clip, /## Change request/); assert.match(clip, /\*\*Change:\*\* copy me/); assert.match(clip, /Hero ← App/); assert.match(clip, /`#get-started`/);
   await disarm(page);
   await page.close();
 });
@@ -270,7 +270,7 @@ test("popup page: shows bridge status and list, clear empties bridge, copy-all w
   await popup.locator("#copyAll").click();
   await popup.waitForFunction(() => document.querySelector("#status").textContent === "copied!");
   const clip = await popup.evaluate(() => navigator.clipboard.readText());
-  assert.match(clip, /# 2 UI change request/); assert.match(clip, /### 1\. popup one/); assert.match(clip, /### 2\. popup two/);
+  assert.match(clip, /# 2 change request/); assert.match(clip, /### 1\. popup one/); assert.match(clip, /### 2\. popup two/);
   // remove one row
   await popup.locator("#list li .x").first().click();
   await popup.waitForFunction(() => document.querySelectorAll("#list li").length === 1);

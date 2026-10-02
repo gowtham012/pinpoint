@@ -17,8 +17,9 @@ export function createMcpServer(api) {
     { name: "pinpoint", version: VERSION },
     {
       instructions:
-        "Pinpoint delivers UI change requests the developer made by clicking elements in their own browser. " +
-        "Call get_pending_annotations at the start of any UI or styling task, whenever the developer refers to something they marked, clicked, pinned or annotated, and whenever they mention a change to a page they are looking at. " +
+        "Pinpoint delivers change requests the developer made by pointing at an element in their running app — a page in their browser, or a native app in the iOS Simulator — and saying, in their own words, what should change. " +
+        "A request may be about how the element looks or about what it does (behaviour, validation, state, data, API calls): the comment is the full instruction, and the element is where to start in the code, not the limit of the change. " +
+        "Call get_pending_annotations at the start of any UI, styling or feature task, whenever the developer refers to something they marked, clicked, pinned or annotated, and whenever they mention a change to a page or screen they are looking at. " +
         "Each annotation has the comment, a CSS selector, DOM path, computed styles, a component/source-file hint and a cropped screenshot. " +
         "After applying each change, call resolve_annotation with its id AND a note saying what you changed and where — the pin disappears in their browser and your note is shown there as your reply, which is how they see what was done. " +
         "If an annotation is marked possibly stale, or you are about to edit something that was marked a while ago, call recheck_annotation first: it re-finds the element in the developer's browser and returns what it looks like now next to the crop taken when they marked it. " +
@@ -41,7 +42,7 @@ export function createMcpServer(api) {
   server.registerTool(
     "get_pending_annotations",
     {
-      title: "Get pending UI annotations",
+      title: "Get pending annotations",
       description: "Return every pending annotation (comment + element details + screenshot) as a markdown task list. Use this first.",
       inputSchema: { url: z.string().optional().describe("Only annotations whose page URL starts with this") },
     },
@@ -195,7 +196,7 @@ export function createMcpServer(api) {
     }
   );
 
-  server.registerResource("pending", "pinpoint://pending", { title: "Pending UI annotations", mimeType: "text/markdown" }, async (uri) => ({
+  server.registerResource("pending", "pinpoint://pending", { title: "Pending annotations", mimeType: "text/markdown" }, async (uri) => ({
     contents: [{ uri: uri.href, mimeType: "text/markdown", text: pendingMarkdown(await api.db()) }],
   }));
 

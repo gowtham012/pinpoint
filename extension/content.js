@@ -392,7 +392,7 @@
     toast: shadow.querySelector(".toast"),
   };
   ui.sendKbd.textContent = K_SEND;
-  ui.text.placeholder = "What should change here?";
+  ui.text.placeholder = "What should change here — how it looks or what it does?";
 
   // Inline !important styles on the host, because the shadow ":host { all: initial }" rule would
   // otherwise leave it a static, inline, z-index:auto element — and then any page with its own
@@ -1108,7 +1108,7 @@
     ui.send.title = `Send to your coding agent (${K_SEND})`;
     ui.text.placeholder = region
       ? `What should change about this area? e.g. make these cards two-up on mobile — ${K_SEND} to send`
-      : `What should change here? e.g. make this button full-width on mobile — ${K_SEND} to send`;
+      : `What should change — how it looks or what it does? e.g. disable this until the form is valid — ${K_SEND} to send`;
     setTimeout(() => ui.text.focus(), 0);
   }
   // The elements under a point, innermost first — the same list devtools walks. Anything of ours is
@@ -1273,7 +1273,7 @@
   function formatPrompt(a) {
     const s = a.source || {};
     const lines = [
-      `## UI change request`,
+      `## Change request`,
       ``,
       `**Change:** ${a.comment || "(no comment)"}`,
       ``,

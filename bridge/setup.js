@@ -102,7 +102,15 @@ async function waitForExtension(rl, port, name) {
   return false;
 }
 
-export async function runSetup({ project = null, port = DEFAULT_PORT, yes = false, start = true, ids = [] } = {}) {
+// "mobile" and "native" are what people say; the Simulator picker is iOS-only for now.
+export function normTarget(a) {
+  const t = String(a || "").toLowerCase().trim();
+  if (/^(both|all)$/.test(t)) return "both";
+  if (/^(ios|mobile|native|iphone|simulator)$/.test(t)) return "ios";
+  return "web";
+}
+
+export async function runSetup({ project = null, port = DEFAULT_PORT, yes = false, start = true, ids = [], target = null } = {}) {
   const interactive = Boolean(process.stdin.isTTY && !yes);
   const rl = interactive ? readline.createInterface({ input: process.stdin, output: process.stderr }) : null;
   try {
@@ -122,6 +130,17 @@ export async function runSetup({ project = null, port = DEFAULT_PORT, yes = fals
     project = path.resolve(expand(project));
     if (!fs.existsSync(project)) throw new Error(`no such directory: ${project}`);
     if (!fs.existsSync(path.join(project, ".git"))) say(`note: ${project} is not a git repo — carrying on anyway`);
+
+    // 1b. what it is. A web app gets the browser extension; a native iOS app gets the Simulator
+    //     picker at /ios instead, which needs no extension at all but does need Xcode and Maestro.
+    target = normTarget(target ?? (await ask(rl, "Is it a web app or a native iOS app? (web, ios, both)", "web")));
+    const web = target !== "ios", ios = target !== "web";
+    if (ios) {
+      const { iosReadiness } = await import("./ios.js");
+      const missing = iosReadiness();
+      if (!missing.length) say("iOS Simulator: Xcode, Maestro and Java are all here.");
+      for (const m of missing) say(`iOS Simulator needs ${m}`);
+    }
 
     // 2. a port nothing else owns. The extension popup has to agree, so this is worth saying out loud.
     const running = await bridgeHealth(port);
@@ -173,7 +192,7 @@ export async function runSetup({ project = null, port = DEFAULT_PORT, yes = fals
     //    profile — only the Web Store or enterprise policy can — so this goes as far as it honestly
     //    can: pick the browser, open its page, put the folder on the clipboard, then watch for it.
     const { detectBrowsers, installNativeHost } = await import("./native-host.js");
-    const browsers = detectBrowsers();
+    const browsers = web ? detectBrowsers() : [];
     let chosen = browsers[0] || null;
     if (browsers.length > 1) {
       const names = browsers.map((b) => b.name);
@@ -202,12 +221,15 @@ export async function runSetup({ project = null, port = DEFAULT_PORT, yes = fals
     // 6. the bridge itself, last, because it blocks.
     console.error("");
     if (wanted.includes("claude")) say("Restart Claude Code once — it reads MCP servers and hooks at session start.");
-    say(`Then open your dev site and press ${process.platform === "darwin" ? "⌥⇧A" : "Alt+Shift+A"}.`);
+    if (web) say(`Then open your dev site and press ${process.platform === "darwin" ? "⌥⇧A" : "Alt+Shift+A"}.`);
+    const picker = `http://127.0.0.1:${port}/ios`;
+    if (ios) say(`${web ? "For the iOS app" : "Then"}: run it in the Simulator and open ${picker}`);
     console.error("");
 
     if (start) {
       const { startDaemon } = await import("./daemon.js");
       await startDaemon({ port, project, restartable: true });
+      if (ios && !web && interactive && process.platform === "darwin") spawnSync("open", [picker], { stdio: "ignore" });
       if (chosen && (await waitForExtension(rl, port, chosen.name))) say(`✓ Pinpoint is live in ${chosen.name}.`);
     }
   } finally {

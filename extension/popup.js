@@ -123,7 +123,7 @@ $("#copyAll").onclick = async () => {
   const items = res?.annotations || [];
   if (!items.length) return;
   const text = items.map((a, i) => formatPrompt(a, i + 1)).join("\n\n---\n\n");
-  await navigator.clipboard.writeText(`# ${items.length} UI change request(s)\n\n` + text);
+  await navigator.clipboard.writeText(`# ${items.length} change request(s)\n\n` + text);
   $("#status").textContent = "copied!";
   setTimeout(refresh, 900);
 };
