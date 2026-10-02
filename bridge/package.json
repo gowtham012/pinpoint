@@ -1,7 +1,8 @@
 {
   "name": "pinpoint-bridge",
-  "version": "0.4.0",
-  "description": "Local bridge between the Pinpoint browser extension and coding agents (Claude Code, Cursor, Codex) over MCP.",
+  "version": "0.5.0",
+  "mcpName": "io.github.gowtham012/pinpoint",
+  "description": "Point at an element in your running app (browser or iOS Simulator), say what should change, and your coding agent gets it over MCP.",
   "type": "module",
   "bin": {
     "pinpoint-bridge": "./cli.js"
@@ -25,6 +26,8 @@
     "cursor",
     "codex",
     "frontend",
+    "ios",
+    "react-native",
     "annotations",
     "developer-tools"
   ],
@@ -39,6 +42,7 @@
   "homepage": "https://github.com/gowtham012/pinpoint#readme",
   "files": [
     "*.js",
+    "*.html",
     "README.md"
   ]
 }

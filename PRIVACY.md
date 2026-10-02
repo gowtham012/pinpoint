@@ -1,6 +1,6 @@
 # Privacy
 
-*Last updated: 9 September 2026. This describes Pinpoint 0.4.x — the extension in `extension/` and
+*Last updated: 2 October 2026. This describes Pinpoint 0.5.x — the extension in `extension/` and
 the bridge in `bridge/`, as published in this repository.*
 
 Pinpoint is a developer tool that runs on your own machine. There is no Pinpoint account, no Pinpoint

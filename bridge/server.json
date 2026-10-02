@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.gowtham012/pinpoint",
+  "title": "Pinpoint",
+  "description": "Click an element in your running app or iOS Simulator, say what should change; your agent gets it.",
+  "repository": {
+    "url": "https://github.com/gowtham012/pinpoint",
+    "source": "github",
+    "subfolder": "bridge"
+  },
+  "websiteUrl": "https://github.com/gowtham012/pinpoint#readme",
+  "version": "0.5.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "pinpoint-bridge",
+      "version": "0.5.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "description": "Run as a stdio MCP server"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "PINPOINT_PORT",
+          "description": "Port of the local Pinpoint bridge (default 7331)",
+          "isRequired": false,
+          "format": "number",
+          "default": "7331"
+        }
+      ]
+    }
+  ]
+}
