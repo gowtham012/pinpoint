@@ -919,7 +919,12 @@ test("setup wires a project up in one non-interactive run, twice over", async ()
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), "pp-setup-proj-"));
   // HOME as well as PINPOINT_HOME: setup writes agent config and native-host manifests under it,
   // and a test that edited the developer's own ~/.claude.json would be a bug worth shipping never.
-  const env = { ...process.env, HOME, USERPROFILE: home, PINPOINT_HOME: path.join(home, ".pinpoint") };
+  // A stand-in `claude` on PATH: setup only wires hooks when it finds one, and CI has none — the
+  // test passed on any machine with Claude Code installed and failed everywhere else. It also keeps
+  // the test from running `claude mcp add` against the real CLI.
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "pp-setup-bin-"));
+  fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const env = { ...process.env, HOME, USERPROFILE: home, PINPOINT_HOME: path.join(home, ".pinpoint"), PATH: bin + path.delimiter + process.env.PATH };
   const run = (args, cwd = undefined) => new Promise((res) => {
     const p = spawn("node", [CLI, "setup", "--yes", "--no-start", "--port", "7401", ...args], { env, cwd, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
