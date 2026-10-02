@@ -3,6 +3,8 @@
 [![tests](https://github.com/gowtham012/pinpoint/actions/workflows/test.yml/badge.svg)](https://github.com/gowtham012/pinpoint/actions/workflows/test.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![stars](https://img.shields.io/github/stars/gowtham012/pinpoint?style=flat)](https://github.com/gowtham012/pinpoint/stargazers)
+[![npm](https://img.shields.io/npm/v/pinpoint-bridge.svg)](https://www.npmjs.com/package/pinpoint-bridge)
+[![Glama score](https://glama.ai/mcp/servers/gowtham012/pinpoint/badges/score.svg)](https://glama.ai/mcp/servers/gowtham012/pinpoint)
 
 Click an element on your local dev site, write what should change, and your coding agent gets it — with the selector, DOM path, computed styles, React/Vue component chain, source-file hint and a cropped screenshot. No screenshot files piling up in your Downloads folder, no describing "the third button on the left". Building a native app? The same works on the [iOS Simulator](#native-ios-apps-simulator).
 
@@ -62,6 +64,19 @@ default, so Enter all the way through is a working setup:
 Then it registers the launcher behind the popup's **Start bridge** button and starts the bridge.
 Non-interactive, for a scripted machine: `node pinpoint/bridge/cli.js setup ~/code/my-app --yes`
 (add `--for ios` or `--for both`; the default is `web`).
+
+Building only a native iOS app? You can skip the clone: the iOS picker needs no extension.
+
+```bash
+npx -y pinpoint-bridge                                      # the bridge, with the picker at /ios
+claude mcp add pinpoint -s user -- npx -y pinpoint-bridge mcp   # once, for Claude Code
+```
+
+Pinpoint is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io)
+(`io.github.gowtham012/pinpoint`), on [cursor.directory](https://cursor.directory/plugins/pinpoint)
+(one-click **Add to Cursor**) and on [Glama](https://glama.ai/mcp/servers/gowtham012/pinpoint). All
+of them install the MCP server only — for web pages you still need the extension and bridge from the
+clone above.
 
 **The one step that cannot be a command.** Chrome does not let a terminal load an unpacked extension
 into your own profile — only the Web Store or an enterprise policy can. So setup opens your browser's
@@ -148,7 +163,8 @@ read fails, and the bridge then starts a fresh Maestro and tries once more. If t
 minutes, close the Claude Code sessions you are not using that have the Maestro MCP server.
 
 Setup asks whether your app is web or iOS, and for iOS opens this page for you. Otherwise, with the
-bridge running, open **http://127.0.0.1:7331/ios**. It shows the Simulator's screen: hover to
+bridge running — `node cli.js` from the clone, or `npx -y pinpoint-bridge` with no clone at all — open
+**http://127.0.0.1:7331/ios**. It shows the Simulator's screen: hover to
 see each element, click one, type what should change, **⌘↩**. The note reaches your agent like any
 other, with the element's `accessibilityIdentifier` (your `testID`), its label, its path in the tree,
 its frame and a crop. Press **R** (or Refresh) after the app changes; resolved notes drop off.
@@ -276,20 +292,23 @@ about the outcome you want ("should", "instead of", "when … then …"), the le
 
 ## Connecting other agents
 
-Both snippets need the absolute path to `cli.js`: from `pinpoint/bridge`, run `pwd` and add `/cli.js` —
-or copy the ready-made line that `node cli.js --help` prints. Restart the editor afterwards; MCP servers
-are read at startup.
+The simplest entry runs the published package, so there is no path to get right:
+`npx -y pinpoint-bridge mcp`. It talks to whichever bridge is running, cloned or not. To pin the agent
+to your clone instead, use the absolute path to `cli.js` (from `pinpoint/bridge`, run `pwd` and add
+`/cli.js`, or copy the line `node cli.js --help` prints). Restart the editor afterwards; MCP servers are
+read at startup.
 
-**Cursor** — `.cursor/mcp.json` (or `~/.cursor/mcp.json` for every project):
+**Cursor** — one click from [cursor.directory](https://cursor.directory/plugins/pinpoint), or
+`.cursor/mcp.json` (or `~/.cursor/mcp.json` for every project):
 ```json
-{ "mcpServers": { "pinpoint": { "command": "node", "args": ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"] } } }
+{ "mcpServers": { "pinpoint": { "command": "npx", "args": ["-y", "pinpoint-bridge", "mcp"] } } }
 ```
 
 **Codex CLI** — `~/.codex/config.toml`:
 ```toml
 [mcp_servers.pinpoint]
-command = "node"
-args = ["/ABS/PATH/pinpoint/bridge/cli.js", "mcp"]
+command = "npx"
+args = ["-y", "pinpoint-bridge", "mcp"]
 ```
 
 **Any MCP client over HTTP** — `http://127.0.0.1:7331/mcp` (Streamable HTTP, stateless). Windsurf,

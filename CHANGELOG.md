@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Published.** `pinpoint-bridge` is on npm, Pinpoint is in the official MCP Registry as
+  `io.github.gowtham012/pinpoint`, and on cursor.directory and Glama. `npx -y pinpoint-bridge mcp` is
+  now the MCP entry the README suggests, and `npx -y pinpoint-bridge` runs the bridge (and the iOS
+  picker) with no clone at all.
+- **`Dockerfile` and `glama.json`**, so Glama can build the server, list its tools and score it, and
+  so the listing can be claimed. A hosted container is for that inspection only: Pinpoint talks to
+  your browser and Simulator on `127.0.0.1`, so it cannot do anything useful deployed elsewhere.
+
+### Fixed
+- **CI has been red since 10 September.** The setup test assumed a `claude` CLI on the machine,
+  which CI does not have, so setup skipped the hooks the test then looked for. The test now puts a
+  stub `claude` on its own PATH.
+
 ## [0.5.0] — 2026-10-02
 
 Found by installing Pinpoint and using it as a first-time user, then reading the code for causes.
