@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pinpoint": {
+      "command": "npx",
+      "args": ["-y", "pinpoint-bridge", "mcp"]
+    }
+  }
+}
